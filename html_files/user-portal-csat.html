@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NexDesk · User Portal</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:#07090f;color:#e2e8f0;height:100vh;overflow:hidden}
+.ff{font-family:'Outfit',sans-serif}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:#0c1220}
+::-webkit-scrollbar-thumb{background:#1e3047;border-radius:2px}
+
+/* Layout */
+.layout{display:flex;height:100vh}
+.sidebar{width:216px;min-width:216px;background:linear-gradient(180deg,#080c18 0%,#090d1a 100%);border-right:1px solid #101828;display:flex;flex-direction:column;position:relative;z-index:20}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{height:52px;background:#07090f;border-bottom:1px solid #101828;display:flex;align-items:center;padding:0 20px;gap:10px;flex-shrink:0;position:relative;z-index:10}
+.content{flex:1;overflow-y:auto;padding:24px}
+
+/* Sidebar */
+.logo-area{padding:18px 14px 14px;border-bottom:1px solid #0f1726}
+.logo-icon{width:28px;height:28px;background:linear-gradient(135deg,#3b6fff,#7c4dff);border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.nav-section{font-size:10px;font-weight:700;color:#162140;letter-spacing:.1em;text-transform:uppercase;padding:0 4px;margin:14px 0 5px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 12px;border-radius:7px;color:#3d5378;cursor:pointer;font-size:13px;font-weight:500;transition:all .15s;position:relative;margin:1px 0}
+.nav-item:hover{background:rgba(59,111,255,.07);color:#7a9ad0}
+.nav-item.active{background:rgba(59,111,255,.12);color:#4f8ef7}
+.nav-item.active::before{content:'';position:absolute;left:0;top:20%;width:2.5px;height:60%;background:#4f8ef7;border-radius:0 2px 2px 0}
+.nav-badge{margin-left:auto;background:rgba(59,111,255,.2);color:#4f8ef7;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px}
+.user-area{padding:10px;border-top:1px solid #0f1726;margin-top:auto}
+.user-row{display:flex;align-items:center;gap:8px;padding:8px 6px;border-radius:7px;cursor:pointer;transition:background .15s}
+.user-row:hover{background:rgba(255,255,255,.03)}
+.avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#3b6fff,#7c4dff);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0}
+
+/* Cards */
+.card{background:#0c1220;border:1px solid #101828;border-radius:11px;padding:18px;transition:border-color .2s}
+.card:hover{border-color:#1a2a45}
+.glass-card{background:rgba(12,18,32,.8);border:1px solid #101828;border-radius:11px;padding:18px;backdrop-filter:blur(12px)}
+
+/* Stat cards */
+.stat{background:linear-gradient(135deg,#0c1220 0%,#0e1629 100%);border:1px solid #101828;border-radius:11px;padding:18px}
+
+/* Badges - Priority */
+.b{display:inline-flex;align-items:center;gap:3px;padding:2.5px 8px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.02em}
+.p1{background:rgba(239,68,68,.12);color:#f87171;border:1px solid rgba(239,68,68,.22)}
+.p2{background:rgba(249,115,22,.12);color:#fb923c;border:1px solid rgba(249,115,22,.22)}
+.p3{background:rgba(234,179,8,.12);color:#facc15;border:1px solid rgba(234,179,8,.22)}
+.p4{background:rgba(59,130,246,.12);color:#60a5fa;border:1px solid rgba(59,130,246,.22)}
+.p5{background:rgba(100,116,139,.1);color:#94a3b8;border:1px solid rgba(100,116,139,.18)}
+/* Status */
+.s-open{background:rgba(59,111,255,.1);color:#4f8ef7;border:1px solid rgba(59,111,255,.2)}
+.s-prog{background:rgba(234,179,8,.1);color:#fbbf24;border:1px solid rgba(234,179,8,.2)}
+.s-res{background:rgba(16,185,129,.1);color:#34d399;border:1px solid rgba(16,185,129,.2)}
+.s-reo{background:rgba(249,115,22,.1);color:#fb923c;border:1px solid rgba(249,115,22,.2)}
+.s-ai{background:rgba(139,92,246,.1);color:#a78bfa;border:1px solid rgba(139,92,246,.2)}
+.s-esc{background:rgba(239,68,68,.1);color:#f87171;border:1px solid rgba(239,68,68,.2)}
+
+/* Table */
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{text-align:left;padding:9px 14px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#233048;border-bottom:1px solid #101828}
+.tbl td{padding:11px 14px;font-size:13px;color:#8499b5;border-bottom:1px solid rgba(16,24,40,.8)}
+.tbl tr:hover td{background:rgba(59,111,255,.025)}
+.tbl tr:last-child td{border-bottom:none}
+.tbl td.bright{color:#c9d8ee;font-weight:500}
+
+/* Inputs */
+.inp{background:#0e1629;border:1px solid #101828;border-radius:7px;color:#e2e8f0;padding:8px 11px;font-size:13px;width:100%;outline:none;transition:border-color .15s;font-family:'DM Sans',sans-serif}
+.inp:focus{border-color:#3b6fff;box-shadow:0 0 0 3px rgba(59,111,255,.1)}
+.inp::placeholder{color:#1e3047}
+.sel{background:#0e1629;border:1px solid #101828;border-radius:7px;color:#8499b5;padding:8px 11px;font-size:12.5px;outline:none;cursor:pointer;font-family:'DM Sans',sans-serif;appearance:none}
+
+/* Buttons */
+.btn-p{background:#3b6fff;color:#fff;padding:7px 14px;border-radius:7px;font-size:12.5px;font-weight:600;cursor:pointer;border:none;display:inline-flex;align-items:center;gap:5px;transition:all .15s;font-family:'DM Sans',sans-serif}
+.btn-p:hover{background:#2e5fef;box-shadow:0 4px 14px rgba(59,111,255,.35);transform:translateY(-1px)}
+.btn-s{background:transparent;color:#8499b5;padding:7px 12px;border-radius:7px;font-size:12.5px;font-weight:500;cursor:pointer;border:1px solid #101828;display:inline-flex;align-items:center;gap:5px;transition:all .15s;font-family:'DM Sans',sans-serif}
+.btn-s:hover{border-color:#1a2a45;color:#c9d8ee;background:rgba(255,255,255,.02)}
+.btn-ghost{background:none;border:none;color:#3d5378;cursor:pointer;padding:4px;display:flex;align-items:center;justify-content:center;border-radius:5px;transition:color .15s}
+.btn-ghost:hover{color:#8499b5}
+
+/* Timeline */
+.tl-item{position:relative;padding-left:22px;padding-bottom:18px}
+.tl-item::before{content:'';position:absolute;left:6px;top:18px;bottom:0;width:1px;background:#0f1726}
+.tl-item:last-child::before{display:none}
+.tl-dot{position:absolute;left:0;top:3px;width:13px;height:13px;border-radius:50%;background:#3b6fff;border:2px solid #07090f}
+
+/* AI panel */
+.ai-panel{background:linear-gradient(135deg,rgba(124,77,255,.07),rgba(59,111,255,.07));border:1px solid rgba(124,77,255,.18);border-radius:10px;padding:14px}
+
+/* Progress */
+.pbar{height:3px;background:#101828;border-radius:2px;overflow:hidden}
+.pfill{height:100%;border-radius:2px}
+
+/* Notif dropdown */
+.notif-dd{position:absolute;top:calc(100% + 6px);right:0;width:330px;background:#0c1220;border:1px solid #101828;border-radius:11px;box-shadow:0 20px 60px rgba(0,0,0,.6);z-index:200;overflow:hidden}
+
+/* Chat */
+.msg-me{background:#3b6fff;color:#fff;border-radius:10px 10px 3px 10px;padding:9px 13px;max-width:74%;font-size:13px;line-height:1.5}
+.msg-them{background:#0e1629;border:1px solid #101828;color:#c9d8ee;border-radius:10px 10px 10px 3px;padding:9px 13px;max-width:74%;font-size:13px;line-height:1.5}
+
+/* Page anim */
+.page{animation:fi .2s ease}
+@keyframes fi{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+
+/* Icon wrapper */
+.icon-btn{width:32px;height:32px;border-radius:7px;border:1px solid #101828;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#3d5378;transition:all .15s}
+.icon-btn:hover{border-color:#1a2a45;color:#8499b5}
+
+svg.i{display:inline-block;flex-shrink:0}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ═══════════ SIDEBAR ═══════════ -->
+<aside class="sidebar">
+  <div class="logo-area">
+    <div style="display:flex;align-items:center;gap:9px">
+      <div class="logo-icon">
+        <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 0 0-2 2v3a2 2 0 0 1 0 4v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a2 2 0 0 1 0-4V7a2 2 0 0 0-2-2H5z"/></svg>
+      </div>
+      <div>
+        <div class="ff" style="font-size:14px;font-weight:700;color:#c9d8ee">NexDesk</div>
+        <div style="font-size:9.5px;color:#162140;font-weight:600;letter-spacing:.08em">USER PORTAL</div>
+      </div>
+    </div>
+  </div>
+
+  <nav style="padding:10px 8px;flex:1;overflow-y:auto">
+    <div class="nav-section">Main</div>
+    <div class="nav-item active" onclick="nav('dashboard',this)">
+      <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </div>
+    <div class="nav-item" onclick="nav('tickets',this)">
+      <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 0 0-2 2v3a2 2 0 0 1 0 4v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a2 2 0 0 1 0-4V7a2 2 0 0 0-2-2H5z"/></svg>
+      My Tickets
+      <span class="nav-badge">8</span>
+    </div>
+    <div class="nav-item" onclick="nav('new',this)">
+      <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+      New Ticket
+    </div>
+    <div class="nav-section">Account</div>
+    <div class="nav-item" onclick="nav('profile',this)">
+      <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      My Profile
+    </div>
+    <div class="nav-item" onclick="nav('csat',this)">
+      <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      CSAT &amp; Feedback
+      <span class="nav-badge" style="background:rgba(251,191,36,.2);color:#fbbf24;border:1px solid rgba(251,191,36,.2)">3</span>
+    </div>
+    <div class="nav-section" style="margin-top:20px">Switch Portal</div>
+    <a href="team-portal.html" style="text-decoration:none">
+      <div class="nav-item" style="color:#2a4060">
+        <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Team Portal →
+      </div>
+    </a>
+    <a href="admin-portal.html" style="text-decoration:none">
+      <div class="nav-item" style="color:#2a4060">
+        <svg class="i" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M4.93 19.07l1.41-1.41M19.07 19.07l-1.41-1.41M1 12h2M21 12h2M12 1v2M12 21v2"/></svg>
+        Admin Portal →
+      </div>
+    </a>
+  </nav>
+
+  <div class="user-area">
+    <div class="user-row">
+      <div class="avatar">R</div>
+      <div style="overflow:hidden">
+        <div style="font-size:12.5px;font-weight:600;color:#c9d8ee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Ravi Kumar</div>
+        <div style="font-size:11px;color:#1e3047">ravi@acmecorp.io</div>
+      </div>
+      <svg class="i" style="margin-left:auto;flex-shrink:0;color:#1e3047" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+    </div>
+  </div>
+</aside>
+
+<!-- ═══════════ MAIN ═══════════ -->
+<div class="main">
+
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <div style="position:relative;flex:1;max-width:360px">
+      <svg style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:#1e3047" class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input class="inp" placeholder="Search tickets, incidents…" style="padding-left:30px;height:32px;font-size:12.5px;background:#0c1220">
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+
+      <!-- Notif -->
+      <div style="position:relative">
+        <button class="icon-btn" onclick="toggleNotif()">
+          <svg class="i" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span style="position:absolute;top:5px;right:5px;width:6px;height:6px;background:#ef4444;border-radius:50%;border:1.5px solid #07090f"></span>
+        </button>
+        <div class="notif-dd" id="notifDd" style="display:none">
+          <div style="padding:12px 16px;border-bottom:1px solid #101828;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:13px;font-weight:600;color:#e2e8f0">Notifications</span>
+            <span style="font-size:11px;color:#3b6fff;cursor:pointer">Mark all read</span>
+          </div>
+          <div style="max-height:300px;overflow-y:auto">
+            <div style="padding:11px 16px;border-bottom:1px solid rgba(16,24,40,.6);display:flex;gap:9px;cursor:pointer;background:rgba(59,111,255,.04)">
+              <div style="width:7px;height:7px;background:#3b6fff;border-radius:50%;flex-shrink:0;margin-top:5px"></div>
+              <div><div style="font-size:12.5px;color:#c9d8ee;font-weight:500">TKT-0001 escalated to P1 Critical</div><div style="font-size:11.5px;color:#3d5378;margin-top:2px">Server cluster outage</div><div style="font-size:11px;color:#1e3047;margin-top:3px">2 min ago</div></div>
+            </div>
+            <div style="padding:11px 16px;border-bottom:1px solid rgba(16,24,40,.6);display:flex;gap:9px;cursor:pointer">
+              <div style="width:7px;height:7px;background:#3b6fff;border-radius:50%;flex-shrink:0;margin-top:5px"></div>
+              <div><div style="font-size:12.5px;color:#c9d8ee;font-weight:500">TKT-0003 assigned to Payments Team</div><div style="font-size:11.5px;color:#3d5378;margin-top:2px">Payment gateway timeout</div><div style="font-size:11px;color:#1e3047;margin-top:3px">18 min ago</div></div>
+            </div>
+            <div style="padding:11px 16px;display:flex;gap:9px;cursor:pointer">
+              <div style="width:7px;height:7px;background:#34d399;border-radius:50%;flex-shrink:0;margin-top:5px"></div>
+              <div><div style="font-size:12.5px;color:#c9d8ee;font-weight:500">TKT-0005 auto-resolved by AI</div><div style="font-size:11.5px;color:#3d5378;margin-top:2px">Confidence 94% · Email delay</div><div style="font-size:11px;color:#1e3047;margin-top:3px">1 hour ago</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:rgba(59,111,255,.1);border:1px solid rgba(59,111,255,.18);border-radius:5px;padding:3px 9px">
+        <span style="font-size:10.5px;font-weight:700;color:#4f8ef7;letter-spacing:.05em">USER PORTAL</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- PAGES -->
+  <main class="content">
+
+    <!-- ══ DASHBOARD ══ -->
+    <div id="pg-dashboard" class="page">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px">
+        <div>
+          <h1 class="ff" style="font-size:19px;font-weight:700;color:#e2e8f0">Good morning, Ravi 👋</h1>
+          <p style="font-size:12.5px;color:#3d5378;margin-top:3px">Wednesday, May 27 2026 · Your ticket overview</p>
+        </div>
+        <button class="btn-p" onclick="nav('new',null)">
+          <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New Ticket
+        </button>
+      </div>
+
+      <!-- Stats row -->
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px">
+        <div class="stat"><div style="font-size:10.5px;font-weight:700;color:#3d5378;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Total</div><div class="ff" style="font-size:26px;font-weight:700;color:#e2e8f0">24</div><div style="font-size:11px;color:#233048;margin-top:3px">All tickets</div></div>
+        <div class="stat"><div style="font-size:10.5px;font-weight:700;color:#4f8ef7;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Open</div><div class="ff" style="font-size:26px;font-weight:700;color:#4f8ef7">6</div><div style="font-size:11px;color:#233048;margin-top:3px">Awaiting action</div></div>
+        <div class="stat"><div style="font-size:10.5px;font-weight:700;color:#fbbf24;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">In Progress</div><div class="ff" style="font-size:26px;font-weight:700;color:#fbbf24">5</div><div style="font-size:11px;color:#233048;margin-top:3px">Being worked on</div></div>
+        <div class="stat"><div style="font-size:10.5px;font-weight:700;color:#34d399;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Resolved</div><div class="ff" style="font-size:26px;font-weight:700;color:#34d399">9</div><div style="font-size:11px;color:#233048;margin-top:3px">Closed tickets</div></div>
+        <div class="stat"><div style="font-size:10.5px;font-weight:700;color:#fb923c;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Reopened</div><div class="ff" style="font-size:26px;font-weight:700;color:#fb923c">2</div><div style="font-size:11px;color:#233048;margin-top:3px">Needs review</div></div>
+        <div class="stat"><div style="font-size:10.5px;font-weight:700;color:#a78bfa;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">AI Resolved</div><div class="ff" style="font-size:26px;font-weight:700;color:#a78bfa">2</div><div style="font-size:11px;color:#233048;margin-top:3px">Auto-closed</div></div>
+      </div>
+
+      <!-- CSAT Dashboard Widgets -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+        <div class="stat" style="border-left:3px solid #fbbf24;cursor:pointer" onclick="nav('csat',document.querySelector('[onclick*=csat]'))">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="font-size:10.5px;font-weight:700;color:#fbbf24;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Avg Satisfaction</div>
+              <div class="ff" style="font-size:26px;font-weight:700;color:#fbbf24">4.7<span style="font-size:13px;color:#3d5378">/5</span></div>
+              <div style="font-size:11px;color:#233048;margin-top:3px">Overall CSAT score</div>
+            </div>
+            <div style="font-size:20px;opacity:.6">★</div>
+          </div>
+          <div class="pbar" style="margin-top:10px"><div class="pfill" style="width:94%;background:#fbbf24"></div></div>
+        </div>
+        <div class="stat" style="border-left:3px solid #34d399;cursor:pointer" onclick="nav('csat',null)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="font-size:10.5px;font-weight:700;color:#34d399;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Resolved Tickets</div>
+              <div class="ff" style="font-size:26px;font-weight:700;color:#34d399">9</div>
+              <div style="font-size:11px;color:#233048;margin-top:3px">Awaiting your rating</div>
+            </div>
+            <svg class="i" style="color:#34d399;opacity:.5" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>
+          </div>
+        </div>
+        <div class="stat" style="border-left:3px solid #f87171;cursor:pointer" onclick="nav('csat',null)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="font-size:10.5px;font-weight:700;color:#f87171;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Pending Feedback</div>
+              <div class="ff" style="font-size:26px;font-weight:700;color:#f87171">3</div>
+              <div style="font-size:11px;color:#233048;margin-top:3px">Needs your review</div>
+            </div>
+            <svg class="i" style="color:#f87171;opacity:.5" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+        </div>
+        <div class="stat" style="border-left:3px solid #4f8ef7;cursor:pointer" onclick="nav('csat',null)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="font-size:10.5px;font-weight:700;color:#4f8ef7;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Recently Rated</div>
+              <div class="ff" style="font-size:26px;font-weight:700;color:#4f8ef7">6</div>
+              <div style="font-size:11px;color:#233048;margin-top:3px">Rated this month</div>
+            </div>
+            <svg class="i" style="color:#4f8ef7;opacity:.5" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 290px;gap:14px;margin-bottom:16px">
+        <div class="card" style="grid-column:span 2">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <div><div style="font-size:13px;font-weight:600;color:#e2e8f0">Ticket Activity</div><div style="font-size:11.5px;color:#3d5378;margin-top:2px">Last 30 days</div></div>
+            <div style="display:flex;gap:4px">
+              <button style="padding:3px 9px;border-radius:5px;background:rgba(59,111,255,.12);border:1px solid rgba(59,111,255,.2);color:#4f8ef7;font-size:11px;cursor:pointer">30d</button>
+              <button style="padding:3px 9px;border-radius:5px;background:transparent;border:1px solid #101828;color:#3d5378;font-size:11px;cursor:pointer">90d</button>
+            </div>
+          </div>
+          <canvas id="trendChart" style="max-height:160px"></canvas>
+        </div>
+        <div class="card">
+          <div style="font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:3px">By Priority</div>
+          <div style="font-size:11.5px;color:#3d5378;margin-bottom:12px">Ticket distribution</div>
+          <canvas id="prioChart" style="max-height:140px"></canvas>
+          <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;justify-content:space-between"><div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;background:#ef4444;border-radius:2px"></div><span style="font-size:11.5px;color:#8499b5">P1 Critical</span></div><span style="font-size:11.5px;font-weight:600;color:#e2e8f0">3</span></div>
+            <div style="display:flex;justify-content:space-between"><div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;background:#f97316;border-radius:2px"></div><span style="font-size:11.5px;color:#8499b5">P2 High</span></div><span style="font-size:11.5px;font-weight:600;color:#e2e8f0">5</span></div>
+            <div style="display:flex;justify-content:space-between"><div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;background:#eab308;border-radius:2px"></div><span style="font-size:11.5px;color:#8499b5">P3 Medium</span></div><span style="font-size:11.5px;font-weight:600;color:#e2e8f0">8</span></div>
+            <div style="display:flex;justify-content:space-between"><div style="display:flex;align-items:center;gap:5px"><div style="width:7px;height:7px;background:#3b82f6;border-radius:2px"></div><span style="font-size:11.5px;color:#8499b5">P4/P5</span></div><span style="font-size:11.5px;font-weight:600;color:#e2e8f0">8</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Activity -->
+      <div class="card">
+        <div style="font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:16px">Recent Activity</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 40px">
+          <div>
+            <div class="tl-item"><div class="tl-dot" style="background:#ef4444"></div><div style="font-size:12.5px;color:#c9d8ee;font-weight:500">TKT-0001 escalated to Critical</div><div style="font-size:11.5px;color:#3d5378;margin-top:2px">Server cluster outage · 2 min ago</div></div>
+            <div class="tl-item"><div class="tl-dot" style="background:#fbbf24"></div><div style="font-size:12.5px;color:#c9d8ee;font-weight:500">TKT-0003 moved to In Progress</div><div style="font-size:11.5px;color:#3d5378;margin-top:2px">Payments team assigned · 18 min ago</div></div>
+            <div class="tl-item"><div class="tl-dot" style="background:#a78bfa"></div><div style="font-size:12.5px;color:#c9d8ee;font-weight:500">TKT-0005 AI auto-resolved (94%)</div><div style="font-size:11.5px;color:#3d5378;margin-top:2px">Email notifications delay · 1 hr ago</div></div>
+          </div>
+          <div>
+            <div class="tl-item"><div class="tl-dot" style="background:#34d399"></div><div style="font-size:12.5px;color:#c9d8ee;font-weight:500">TKT-0007 resolved by Product Team</div><div style="font-size:11.5px;color:#3d5378;margin-top:2px">Profile picture upload fix · 3 hrs ago</div></div>
+            <div class="tl-item"><div class="tl-dot" style="background:#4f8ef7"></div><div style="font-size:12.5px;color:#c9d8ee;font-weight:500">TKT-0008 linked to INC-0012</div><div style="font-size:11.5px;color:#3d5378;margin-top:2px">DB replication → incident cluster · 4 hrs ago</div></div>
+            <div class="tl-item"><div class="tl-dot"></div><div style="font-size:12.5px;color:#c9d8ee;font-weight:500">You submitted TKT-0006</div><div style="font-size:11.5px;color:#3d5378;margin-top:2px">Dashboard charts (Firefox) · Yesterday</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ MY TICKETS ══ -->
+    <div id="pg-tickets" class="page" style="display:none">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px">
+        <div>
+          <h1 class="ff" style="font-size:19px;font-weight:700;color:#e2e8f0">My Tickets</h1>
+          <p style="font-size:12.5px;color:#3d5378;margin-top:3px">All support requests submitted by you</p>
+        </div>
+        <button class="btn-p" onclick="nav('new',null)">
+          <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New Ticket
+        </button>
+      </div>
+
+      <!-- Filters -->
+      <div class="card" style="margin-bottom:14px;padding:12px 14px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <div style="position:relative;flex:1;min-width:180px">
+            <svg style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:#1e3047" class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input class="inp" placeholder="Search tickets…" style="padding-left:28px;height:32px;font-size:12px">
+          </div>
+          <select class="sel" style="height:32px;min-width:120px"><option>All Status</option><option>Open</option><option>In Progress</option><option>Resolved</option><option>AI Resolved</option><option>Reopened</option></select>
+          <select class="sel" style="height:32px;min-width:120px"><option>All Priority</option><option>P1 - Critical</option><option>P2 - High</option><option>P3 - Medium</option><option>P4 - Low</option><option>P5 - Info</option></select>
+          <input type="date" class="sel" style="height:32px;min-width:130px">
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="card" style="padding:0;overflow:hidden">
+        <table class="tbl">
+          <thead>
+            <tr><th>TICKET ID</th><th>SUBJECT</th><th>CATEGORY</th><th>PRIORITY</th><th>STATUS</th><th>ASSIGNED TEAM</th><th>LAST UPDATED</th><th></th></tr>
+          </thead>
+          <tbody>
+            <tr style="cursor:pointer" onclick="nav('detail',null)">
+              <td><span class="ff" style="font-size:12px;color:#4f8ef7;font-weight:600">TKT-0001</span></td>
+              <td class="bright" style="max-width:200px"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">Server cluster outage in prod-us-east-1</div></td>
+              <td style="font-size:12px;color:#3d5378">Infrastructure</td>
+              <td><span class="b p1">● P1 Critical</span></td>
+              <td><span class="b s-open">Open</span></td>
+              <td style="font-size:12.5px">Infra Team</td>
+              <td style="font-size:12px;color:#3d5378">2 min ago</td>
+              <td><button class="btn-ghost" onclick="event.stopPropagation();nav('detail',null)"><svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></button></td>
+            </tr>
+            <tr style="cursor:pointer" onclick="nav('detail',null)">
+              <td><span class="ff" style="font-size:12px;color:#4f8ef7;font-weight:600">TKT-0002</span></td>
+              <td class="bright"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">Login failure for enterprise SSO users</div></td>
+              <td style="font-size:12px;color:#3d5378">Authentication</td>
+              <td><span class="b p2">● P2 High</span></td>
+              <td><span class="b s-prog">In Progress</span></td>
+              <td style="font-size:12.5px">Auth Team</td>
+              <td style="font-size:12px;color:#3d5378">18 min ago</td>
+              <td><button class="btn-ghost"><svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></button></td>
+            </tr>
+            <tr>
+              <td><span class="ff" style="font-size:12px;color:#4f8ef7;font-weight:600">TKT-0003</span></td>
+              <td class="bright"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">Payment gateway timeout on checkout</div></td>
+              <td style="font-size:12px;color:#3d5378">Payments</td>
+              <td><span class="b p2">● P2 High</span></td>
+              <td><span class="b s-prog">In Progress</span></td>
+              <td style="font-size:12.5px">Payments Team</td>
+              <td style="font-size:12px;color:#3d5378">45 min ago</td>
+              <td><button class="btn-ghost"><svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></button></td>
+            </tr>
+            <tr>
+              <td><span class="ff" style="font-size:12px;color:#4f8ef7;font-weight:600">TKT-0004</span></td>
+              <td class="bright"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">Report export fails for large datasets</div></td>
+              <td style="font-size:12px;color:#3d5378">Data & Reports</td>
+              <td><span class="b p3">● P3 Medium</span></td>
+              <td><span class="b s-open">Open</span></td>
+              <td style="font-size:12.5px">Data Team</td>
+              <td style="font-size:12px;color:#3d5378">2 hrs ago</td>
+              <td><button class="btn-ghost"><svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></button></td>
+            </tr>
+            <tr>
+              <td><span class="ff" style="font-size:12px;color:#4f8ef7;font-weight:600">TKT-0005</span></td>
+              <td class="bright"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">Email notifications delayed 10-15 mins</div></td>
+              <td style="font-size:12px;color:#3d5378">Notifications</td>
+              <td><span class="b p4">● P4 Low</span></td>
+              <td><span class="b s-ai">⚡ AI Resolved</span></td>
+              <td style="font-size:12.5px">AI Engine</td>
+              <td style="font-size:12px;color:#3d5378">1 hr ago</td>
+              <td><button class="btn-ghost"><svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></button></td>
+            </tr>
+            <tr>
+              <td><span class="ff" style="font-size:12px;color:#4f8ef7;font-weight:600">TKT-0006</span></td>
+              <td class="bright"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">Dashboard charts not loading in Firefox</div></td>
+              <td style="font-size:12px;color:#3d5378">Frontend</td>
+              <td><span class="b p3">● P3 Medium</span></td>
+              <td><span class="b s-open">Open</span></td>
+              <td style="font-size:12.5px">Frontend Team</td>
+              <td style="font-size:12px;color:#3d5378">Yesterday</td>
+              <td><button class="btn-ghost"><svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></button></td>
+            </tr>
+            <tr>
+              <td><span class="ff" style="font-size:12px;color:#4f8ef7;font-weight:600">TKT-0007</span></td>
+              <td class="bright"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">Update profile picture — UI not responding</div></td>
+              <td style="font-size:12px;color:#3d5378">Product</td>
+              <td><span class="b p5">● P5 Info</span></td>
+              <td><span class="b s-res">Resolved</span></td>
+              <td style="font-size:12.5px">Product Team</td>
+              <td style="font-size:12px;color:#3d5378">3 hrs ago</td>
+              <td><button class="btn-ghost"><svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></button></td>
+            </tr>
+            <tr>
+              <td><span class="ff" style="font-size:12px;color:#4f8ef7;font-weight:600">TKT-0008</span></td>
+              <td class="bright"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">Database replication lag — stale reads</div></td>
+              <td style="font-size:12px;color:#3d5378">Database</td>
+              <td><span class="b p1">● P1 Critical</span></td>
+              <td><span class="b s-esc">Escalated</span></td>
+              <td style="font-size:12.5px">Infra Team</td>
+              <td style="font-size:12px;color:#3d5378">4 hrs ago</td>
+              <td><button class="btn-ghost"><svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></button></td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="padding:11px 14px;border-top:1px solid #101828;display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:12px;color:#3d5378">Showing 8 of 24 tickets</span>
+          <div style="display:flex;gap:3px">
+            <button class="btn-s" style="height:28px;padding:0 9px;font-size:11.5px">← Prev</button>
+            <button style="height:28px;padding:0 10px;font-size:11.5px;background:rgba(59,111,255,.12);border:1px solid rgba(59,111,255,.2);color:#4f8ef7;border-radius:6px;cursor:pointer">1</button>
+            <button class="btn-s" style="height:28px;padding:0 9px;font-size:11.5px">2</button>
+            <button class="btn-s" style="height:28px;padding:0 9px;font-size:11.5px">3</button>
+            <button class="btn-s" style="height:28px;padding:0 9px;font-size:11.5px">Next →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ TICKET DETAIL ══ -->
+    <div id="pg-detail" class="page" style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+        <button class="btn-s" onclick="nav('tickets',null)" style="height:30px;padding:0 10px;font-size:12px">← Back</button>
+        <div>
+          <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+            <span class="ff" style="font-size:13.5px;font-weight:700;color:#4f8ef7">TKT-0001</span>
+            <span class="b p1">● P1 Critical</span>
+            <span class="b s-open">Open</span>
+            <span style="background:rgba(239,68,68,.1);color:#f87171;border:1px solid rgba(239,68,68,.2);padding:2px 8px;border-radius:5px;font-size:10.5px;font-weight:700">🔴 LIVE INCIDENT</span>
+            <span style="background:rgba(239,68,68,.08);color:#f87171;border:1px solid rgba(239,68,68,.15);padding:2px 8px;border-radius:5px;font-size:10.5px;font-weight:600">INC-0012 ↗</span>
+          </div>
+          <h1 class="ff" style="font-size:16px;font-weight:600;color:#e2e8f0;margin-top:5px">Server cluster outage in prod-us-east-1</h1>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 284px;gap:14px">
+        <div style="display:flex;flex-direction:column;gap:14px">
+
+          <!-- AI Summary -->
+          <div class="ai-panel">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:9px">
+              <div style="width:17px;height:17px;background:linear-gradient(135deg,#7c4dff,#3b6fff);border-radius:4px;display:flex;align-items:center;justify-content:center">
+                <svg class="i" width="9" height="9" viewBox="0 0 24 24" fill="white"><polygon points="13,2 3,14 12,14 11,22 21,10 12,10"/></svg>
+              </div>
+              <span style="font-size:11px;font-weight:700;color:#a78bfa;letter-spacing:.04em">AI SUMMARY</span>
+              <span style="margin-left:auto;font-size:10.5px;color:#7c4dff;background:rgba(124,77,255,.1);padding:1px 7px;border-radius:10px;border:1px solid rgba(124,77,255,.2)">92% confidence</span>
+            </div>
+            <p style="font-size:12.5px;color:#8499b5;line-height:1.65;margin:0">Outage began at 09:14 UTC affecting prod-us-east-1. Root cause: misconfigured load balancer rule in v4.2.1 deployment. ~340 users impacted. Matches INC-0008 pattern (Nov 2025). <strong style="color:#c9d8ee">Recommended action: immediate rollback to v4.1.9.</strong></p>
+          </div>
+
+          <!-- Chat (P1 live) -->
+          <div class="card">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+              <div style="font-size:13px;font-weight:600;color:#e2e8f0">Live Conversation <span style="font-size:11px;font-weight:400;color:#3d5378">(P1 — real-time chat enabled)</span></div>
+              <span style="width:7px;height:7px;background:#34d399;border-radius:50%;display:inline-block;box-shadow:0 0 6px #34d399"></span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px">
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
+                <div style="font-size:10.5px;color:#1e3047;text-align:right">You · 09:17 UTC</div>
+                <div class="msg-me">Hi, our prod servers are completely down. We're getting 502s on all endpoints. This is critical!</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-start;gap:3px">
+                <div style="font-size:10.5px;color:#1e3047">Arjun S. (Infra Team) · 09:19 UTC</div>
+                <div class="msg-them">Got the alert. We're on it. Can you confirm — did this start after the v4.2.1 deployment at 09:10?</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
+                <div style="font-size:10.5px;color:#1e3047;text-align:right">You · 09:21 UTC</div>
+                <div class="msg-me">Yes, deployment went live at 09:10. All health checks failing since 09:14.</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-start;gap:3px">
+                <div style="font-size:10.5px;color:#1e3047">Arjun S. (Infra Team) · 09:24 UTC</div>
+                <div class="msg-them">Found it — load balancer config error in v4.2.1. Initiating rollback to v4.1.9 now. ETA 8 minutes. Monitoring closely.</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:7px;padding-top:12px;border-top:1px solid #101828">
+              <input class="inp" type="text" placeholder="Type a message…" style="flex:1;height:34px;font-size:12.5px">
+              <button class="btn-p" style="height:34px;padding:0 14px">Send</button>
+            </div>
+          </div>
+
+          <!-- Similar tickets -->
+          <div class="card">
+            <div style="font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:11px">AI — Similar Tickets</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="padding:10px;border:1px solid #101828;border-radius:8px;cursor:pointer;transition:border-color .15s" onmouseover="this.style.borderColor='#1a2a45'" onmouseout="this.style.borderColor='#101828'">
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:600;color:#4f8ef7">TKT-0089</span><span style="font-size:10.5px;background:rgba(16,185,129,.1);color:#34d399;padding:1px 7px;border-radius:10px;border:1px solid rgba(16,185,129,.2)">93% match</span></div>
+                <div style="font-size:12.5px;color:#8499b5">Load balancer misconfiguration us-east-1 — Resolved Nov 2025</div>
+              </div>
+              <div style="padding:10px;border:1px solid #101828;border-radius:8px;cursor:pointer;transition:border-color .15s" onmouseover="this.style.borderColor='#1a2a45'" onmouseout="this.style.borderColor='#101828'">
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:600;color:#4f8ef7">TKT-0102</span><span style="font-size:10.5px;background:rgba(234,179,8,.1);color:#facc15;padding:1px 7px;border-radius:10px;border:1px solid rgba(234,179,8,.2)">79% match</span></div>
+                <div style="font-size:12.5px;color:#8499b5">Prod outage post-deploy — Rollback resolved — Feb 2026</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right panel -->
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="card">
+            <div style="font-size:10.5px;font-weight:700;color:#1e3047;text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px">Ticket Details</div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div><div style="font-size:10.5px;color:#1e3047;margin-bottom:3px">Status</div><span class="b s-open">Open</span></div>
+              <div><div style="font-size:10.5px;color:#1e3047;margin-bottom:3px">Priority</div><span class="b p1">P1 Critical</span></div>
+              <div><div style="font-size:10.5px;color:#1e3047;margin-bottom:3px">Category</div><span style="font-size:12.5px;color:#8499b5">Infrastructure</span></div>
+              <div><div style="font-size:10.5px;color:#1e3047;margin-bottom:3px">Team</div><span style="font-size:12.5px;color:#8499b5">Infra Team</span></div>
+              <div><div style="font-size:10.5px;color:#1e3047;margin-bottom:3px">Agent</div><span style="font-size:12.5px;color:#8499b5">Arjun Sharma</span></div>
+              <div><div style="font-size:10.5px;color:#1e3047;margin-bottom:3px">Incident</div><span style="font-size:12.5px;color:#f87171;font-weight:600">INC-0012</span></div>
+              <div><div style="font-size:10.5px;color:#1e3047;margin-bottom:3px">Opened</div><span style="font-size:12px;color:#3d5378">May 27 · 09:14 UTC</span></div>
+              <div>
+                <div style="font-size:10.5px;color:#1e3047;margin-bottom:5px">SLA Remaining</div>
+                <div style="display:flex;align-items:center;gap:7px">
+                  <span style="font-size:12px;font-weight:700;color:#f87171">06:23 left</span>
+                  <div class="pbar" style="flex:1"><div class="pfill" style="width:72%;background:#ef4444"></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div style="font-size:10.5px;font-weight:700;color:#1e3047;text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Attachments</div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div style="padding:7px;background:#0e1629;border-radius:6px;display:flex;align-items:center;gap:7px;cursor:pointer">
+                <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4f8ef7" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                <span style="font-size:12px;color:#8499b5;flex:1">error-logs-27may.txt</span>
+                <span style="font-size:10px;color:#1e3047">2.3MB</span>
+              </div>
+              <div style="padding:7px;background:#0e1629;border-radius:6px;display:flex;align-items:center;gap:7px;cursor:pointer">
+                <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4f8ef7" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <span style="font-size:12px;color:#8499b5;flex:1">screenshot-502.png</span>
+                <span style="font-size:10px;color:#1e3047">814KB</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <button class="btn-s" style="width:100%;justify-content:center;font-size:12px">↺ Reopen Ticket</button>
+            <button class="btn-s" style="width:100%;justify-content:center;font-size:12px;color:#f87171;border-color:rgba(239,68,68,.2)">⚠ Flag as Urgent</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ NEW TICKET ══ -->
+    <div id="pg-new" class="page" style="display:none">
+      <div style="margin-bottom:22px">
+        <h1 class="ff" style="font-size:19px;font-weight:700;color:#e2e8f0">Create New Ticket</h1>
+        <p style="font-size:12.5px;color:#3d5378;margin-top:3px">Our AI will auto-detect category, priority and check for duplicates</p>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 284px;gap:14px">
+        <div class="card">
+          <div style="display:flex;flex-direction:column;gap:17px">
+            <div>
+              <label style="display:block;font-size:11px;font-weight:700;color:#3d5378;margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">Subject *</label>
+              <input class="inp" type="text" placeholder="Brief description of the issue…">
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:700;color:#3d5378;margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">Description *</label>
+              <textarea class="inp" rows="5" placeholder="Detailed description. Include steps to reproduce, expected vs actual behavior, environment details…" style="resize:vertical;line-height:1.6"></textarea>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div>
+                <label style="display:block;font-size:11px;font-weight:700;color:#3d5378;margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">Category</label>
+                <select class="sel" style="width:100%;height:36px"><option>Infrastructure</option><option>Authentication</option><option>Payments</option><option>Data & Reports</option><option>Frontend</option><option>Notifications</option><option>Database</option><option>Product</option><option>Other</option></select>
+              </div>
+              <div>
+                <label style="display:block;font-size:11px;font-weight:700;color:#3d5378;margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">Priority</label>
+                <select class="sel" style="width:100%;height:36px"><option>P3 - Medium</option><option>P1 - Critical</option><option>P2 - High</option><option>P4 - Low</option><option>P5 - Informational</option></select>
+              </div>
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:700;color:#3d5378;margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">Attachments</label>
+              <div style="border:2px dashed #101828;border-radius:8px;padding:22px;text-align:center;cursor:pointer;transition:border-color .15s" onmouseover="this.style.borderColor='#3b6fff'" onmouseout="this.style.borderColor='#101828'">
+                <svg class="i" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1e3047" stroke-width="1.5" style="display:block;margin:0 auto 8px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <div style="font-size:12.5px;color:#3d5378">Drop files here or <span style="color:#4f8ef7">browse</span></div>
+                <div style="font-size:11px;color:#1e3047;margin-top:3px">Max 25MB · PNG, JPG, PDF, TXT, ZIP</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;padding-top:4px">
+              <button class="btn-p" style="flex:1;justify-content:center;height:38px;font-size:13px">Submit Ticket →</button>
+              <button class="btn-s" style="height:38px;padding:0 14px">Preview</button>
+              <button class="btn-s" style="height:38px;padding:0 14px">Save Draft</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- AI side panel -->
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="ai-panel">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px">
+              <div style="width:17px;height:17px;background:linear-gradient(135deg,#7c4dff,#3b6fff);border-radius:4px;display:flex;align-items:center;justify-content:center">
+                <svg class="i" width="9" height="9" viewBox="0 0 24 24" fill="white"><polygon points="13,2 3,14 12,14 11,22 21,10 12,10"/></svg>
+              </div>
+              <span style="font-size:11px;font-weight:700;color:#a78bfa">AI INTELLIGENCE</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <div style="padding:9px;background:rgba(0,0,0,.25);border-radius:7px">
+                <div style="font-size:10px;color:#6d52cc;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Detected Category</div>
+                <div style="font-size:13px;color:#e2e8f0;font-weight:600">Infrastructure <span style="font-size:11px;color:#6d52cc">87%</span></div>
+              </div>
+              <div style="padding:9px;background:rgba(0,0,0,.25);border-radius:7px">
+                <div style="font-size:10px;color:#6d52cc;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Urgency Score</div>
+                <div style="display:flex;align-items:center;gap:7px">
+                  <div class="pbar" style="flex:1"><div class="pfill" style="width:82%;background:linear-gradient(90deg,#7c4dff,#ef4444)"></div></div>
+                  <span style="font-size:11.5px;font-weight:700;color:#f87171">HIGH</span>
+                </div>
+              </div>
+              <div style="padding:9px;background:rgba(0,0,0,.25);border-radius:7px">
+                <div style="font-size:10px;color:#6d52cc;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Suggested Team</div>
+                <div style="font-size:13px;color:#e2e8f0;font-weight:600">Infra Team</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Duplicate warning -->
+          <div style="background:rgba(234,179,8,.06);border:1px solid rgba(234,179,8,.18);border-radius:9px;padding:12px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">
+              <svg class="i" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <span style="font-size:11px;font-weight:700;color:#fbbf24">POSSIBLE DUPLICATE</span>
+            </div>
+            <p style="font-size:12px;color:#92651a;line-height:1.5;margin:0">2 similar open tickets found. Possible duplicate of <strong style="color:#fbbf24">TKT-0001</strong>.</p>
+            <button style="margin-top:7px;font-size:11px;color:#fbbf24;background:none;border:none;cursor:pointer;padding:0;text-decoration:underline">View similar →</button>
+          </div>
+
+          <div class="card">
+            <div style="font-size:11px;font-weight:700;color:#1e3047;text-transform:uppercase;letter-spacing:.07em;margin-bottom:9px">Try These First</div>
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <div style="padding:8px;background:#0e1629;border-radius:7px;cursor:pointer;font-size:12.5px;color:#8499b5;line-height:1.45" onmouseover="this.style.background='#101828'" onmouseout="this.style.background='#0e1629'">Check the server status dashboard for known outages</div>
+              <div style="padding:8px;background:#0e1629;border-radius:7px;cursor:pointer;font-size:12.5px;color:#8499b5;line-height:1.45" onmouseover="this.style.background='#101828'" onmouseout="this.style.background='#0e1629'">Verify if a recent deployment was pushed to production</div>
+              <div style="padding:8px;background:#0e1629;border-radius:7px;cursor:pointer;font-size:12.5px;color:#8499b5;line-height:1.45" onmouseover="this.style.background='#101828'" onmouseout="this.style.background='#0e1629'">Review health check endpoints in monitoring console</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ══ CSAT PAGE ══ -->
+    <div id="pg-csat" class="page" style="display:none">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px">
+        <div>
+          <h1 class="ff" style="font-size:19px;font-weight:700;color:#e2e8f0">CSAT &amp; Feedback</h1>
+          <p style="font-size:12.5px;color:#3d5378;margin-top:3px">Rate your experience &amp; manage resolved ticket feedback</p>
+        </div>
+        <div style="display:flex;gap:8px">
+          <select class="sel" style="height:32px;min-width:130px"><option>All Time</option><option>This Month</option><option>Last 30 Days</option><option>Last 90 Days</option></select>
+        </div>
+      </div>
+
+      <!-- CSAT Analytics Widgets -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+        <div class="stat" style="border-top:2px solid #fbbf24">
+          <div style="font-size:10px;font-weight:700;color:#3d5378;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Overall Satisfaction</div>
+          <div class="ff" style="font-size:28px;font-weight:800;color:#fbbf24">94%</div>
+          <div style="font-size:11px;color:#34d399;margin-top:4px">↑ +3% vs last month</div>
+          <div class="pbar" style="margin-top:10px"><div class="pfill" style="width:94%;background:#fbbf24"></div></div>
+        </div>
+        <div class="stat" style="border-top:2px solid #4f8ef7">
+          <div style="font-size:10px;font-weight:700;color:#3d5378;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Average Rating</div>
+          <div class="ff" style="font-size:28px;font-weight:800;color:#4f8ef7">4.7<span style="font-size:14px;font-weight:400;color:#3d5378">/5</span></div>
+          <div style="font-size:11px;color:#3d5378;margin-top:4px">Based on 6 ratings</div>
+          <div style="display:flex;gap:2px;margin-top:8px">
+            <span style="color:#fbbf24;font-size:13px">★★★★★</span>
+          </div>
+        </div>
+        <div class="stat" style="border-top:2px solid #f87171">
+          <div style="font-size:10px;font-weight:700;color:#3d5378;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Unresolved %</div>
+          <div class="ff" style="font-size:28px;font-weight:800;color:#f87171">11%</div>
+          <div style="font-size:11px;color:#3d5378;margin-top:4px">1 of 9 tickets reopened</div>
+          <div class="pbar" style="margin-top:10px"><div class="pfill" style="width:11%;background:#f87171"></div></div>
+        </div>
+        <div class="stat" style="border-top:2px solid #34d399">
+          <div style="font-size:10px;font-weight:700;color:#3d5378;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Most Helpful Team</div>
+          <div class="ff" style="font-size:16px;font-weight:700;color:#34d399;margin-top:4px">Infra Team</div>
+          <div style="font-size:11px;color:#3d5378;margin-top:4px">Avg 5.0 ★ rating</div>
+          <div style="margin-top:8px;display:inline-flex;align-items:center;gap:4px;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.2);padding:2px 8px;border-radius:10px;font-size:10.5px;color:#34d399;font-weight:600">Top Performer</div>
+        </div>
+      </div>
+
+      <!-- Pending Feedback Alert -->
+      <div style="background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.18);border-radius:10px;padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;gap:12px">
+        <svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <div style="flex:1">
+          <div style="font-size:12.5px;font-weight:600;color:#fbbf24">3 tickets are waiting for your feedback</div>
+          <div style="font-size:11.5px;color:#8499b5;margin-top:1px">Rate your satisfaction to help us improve. TKT-0007, TKT-0009, TKT-0011 are pending.</div>
+        </div>
+        <button class="btn-s" style="font-size:12px;white-space:nowrap">Rate Now</button>
+      </div>
+
+      <!-- Resolved Tickets with CSAT -->
+      <div style="display:flex;flex-direction:column;gap:14px">
+
+        <!-- Ticket 1 — Pending Rating -->
+        <div class="card" id="csat-card-1" style="border-color:rgba(251,191,36,.2)">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="ff" style="font-size:12px;color:#4f8ef7;font-weight:700">TKT-0007</span>
+              <span class="b s-res">Resolved</span>
+              <span style="background:rgba(251,191,36,.12);color:#fbbf24;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;border:1px solid rgba(251,191,36,.2)">Pending Rating</span>
+            </div>
+            <div style="font-size:11.5px;color:#3d5378">Resolved: May 27, 2026</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #101828">
+            <div><div style="font-size:10px;font-weight:700;color:#233048;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Subject</div><div style="font-size:12.5px;color:#c9d8ee">Update profile picture — UI not responding</div></div>
+            <div><div style="font-size:10px;font-weight:700;color:#233048;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Team Handled</div><div style="font-size:12.5px;color:#c9d8ee">Product Team</div></div>
+            <div><div style="font-size:10px;font-weight:700;color:#233048;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Resolution Time</div><div style="font-size:12.5px;color:#c9d8ee">3h 12m</div></div>
+            <div><div style="font-size:10px;font-weight:700;color:#233048;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Priority</div><div><span class="b p5">P5 Info</span></div></div>
+          </div>
+          <!-- Rating UI -->
+          <div style="display:flex;align-items:flex-start;gap:24px">
+            <div>
+              <div style="font-size:11.5px;font-weight:600;color:#8499b5;margin-bottom:8px">How satisfied were you?</div>
+              <div style="display:flex;gap:6px" id="stars-1">
+                <span onclick="setRating(1,1)" style="font-size:28px;cursor:pointer;color:#1e3047;transition:color .15s" data-star="1">★</span>
+                <span onclick="setRating(1,2)" style="font-size:28px;cursor:pointer;color:#1e3047;transition:color .15s" data-star="2">★</span>
+                <span onclick="setRating(1,3)" style="font-size:28px;cursor:pointer;color:#1e3047;transition:color .15s" data-star="3">★</span>
+                <span onclick="setRating(1,4)" style="font-size:28px;cursor:pointer;color:#1e3047;transition:color .15s" data-star="4">★</span>
+                <span onclick="setRating(1,5)" style="font-size:28px;cursor:pointer;color:#1e3047;transition:color .15s" data-star="5">★</span>
+              </div>
+            </div>
+            <div style="flex:1">
+              <div style="font-size:11.5px;font-weight:600;color:#8499b5;margin-bottom:8px">Was your issue resolved?</div>
+              <div style="display:flex;gap:8px;margin-bottom:10px" id="res-btns-1">
+                <button onclick="setResolved(1,'yes',this)" class="btn-s" style="font-size:12px;gap:5px"><svg class="i" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>Yes, Resolved</button>
+                <button onclick="setResolved(1,'no',this)" class="btn-s" style="font-size:12px;gap:5px;color:#f87171;border-color:rgba(248,113,113,.25)"><svg class="i" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Not Resolved</button>
+              </div>
+            </div>
+            <div style="flex:1">
+              <div style="font-size:11.5px;font-weight:600;color:#8499b5;margin-bottom:8px">Additional feedback</div>
+              <textarea class="inp" style="height:60px;resize:none;font-size:12px" placeholder="Tell us about your experience…" id="fb-1"></textarea>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;padding-top:22px">
+              <button class="btn-p" onclick="submitFeedback(1)" style="font-size:12px">Submit</button>
+              <button class="btn-s" onclick="skipFeedback(1)" style="font-size:12px">Skip</button>
+            </div>
+          </div>
+          <!-- Reopen panel (hidden) -->
+          <div id="reopen-1" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid rgba(248,113,113,.2);background:rgba(248,113,113,.04);border-radius:8px;padding:12px">
+            <div style="font-size:12.5px;font-weight:600;color:#f87171;margin-bottom:8px">Issue not fully resolved?</div>
+            <div style="font-size:12px;color:#8499b5;margin-bottom:10px">Reopening this ticket will escalate it back to the assigned team with priority review.</div>
+            <div style="display:flex;gap:8px">
+              <button class="btn-p" style="background:#ef4444;font-size:12px;gap:5px" onclick="reopenTicket(1)"><svg class="i" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>Reopen Ticket</button>
+              <button class="btn-s" style="font-size:12px">Escalate to Manager</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ticket 2 — Already Rated -->
+        <div class="card">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="ff" style="font-size:12px;color:#4f8ef7;font-weight:700">TKT-0005</span>
+              <span class="b s-ai">⚡ AI Resolved</span>
+              <span style="background:rgba(52,211,153,.1);color:#34d399;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;border:1px solid rgba(52,211,153,.2)">Rated</span>
+            </div>
+            <div style="font-size:11.5px;color:#3d5378">Resolved: May 26, 2026</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #101828">
+            <div><div style="font-size:10px;font-weight:700;color:#233048;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Subject</div><div style="font-size:12.5px;color:#c9d8ee">Email notifications delayed 10-15 mins</div></div>
+            <div><div style="font-size:10px;font-weight:700;color:#233048;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Team Handled</div><div style="font-size:12.5px;color:#c9d8ee">AI Engine</div></div>
+            <div><div style="font-size:10px;font-weight:700;color:#233048;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Resolution Time</div><div style="font-size:12.5px;color:#c9d8ee">0h 47m</div></div>
+            <div><div style="font-size:10px;font-weight:700;color:#233048;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Status</div><div><span class="b s-res">✓ Resolved</span></div></div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <div style="font-size:11px;color:#3d5378;margin-bottom:6px">Your rating</div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="color:#fbbf24;font-size:18px;letter-spacing:1px">★★★★★</span>
+                <span style="font-size:12.5px;font-weight:600;color:#e2e8f0">5.0</span>
+              </div>
+            </div>
+            <div style="flex:1;max-width:320px;padding:0 24px">
+              <div style="font-size:11px;color:#3d5378;margin-bottom:5px">Feedback</div>
+              <div style="font-size:12px;color:#8499b5;font-style:italic">"AI resolved it perfectly. Very fast, accurate fix."</div>
+            </div>
+            <div style="font-size:11px;color:#3d5378">Submitted May 26, 2026</div>
+          </div>
+        </div>
+
+        <!-- Ticket 3 — Reopened -->
+        <div class="card" style="border-color:rgba(249,115,22,.2)">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="ff" style="font-size:12px;color:#4f8ef7;font-weight:700">TKT-0011</span>
+              <span class="b s-reo">Reopened</span>
+              <span style="background:rgba(249,115,22,.1);color:#fb923c;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;border:1px solid rgba(249,115,22,.2)">Not Resolved</span>
+            </div>
+            <div style="font-size:11.5px;color:#3d5378">Originally resolved: May 24, 2026</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #101828">
+            <div><div style="font-size:10px;font-weight:700;color:#233048;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Subject</div><div style="font-size:12.5px;color:#c9d8ee">Billing invoice missing line items</div></div>
+            <div><div style="font-size:10px;font-weight:700;color:#233048;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Team Handled</div><div style="font-size:12.5px;color:#c9d8ee">Billing Team</div></div>
+            <div><div style="font-size:10px;font-weight:700;color:#233048;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Resolution Time</div><div style="font-size:12.5px;color:#c9d8ee">6h 45m</div></div>
+            <div><div style="font-size:10px;font-weight:700;color:#233048;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Rating Given</div><div style="color:#f87171;font-size:13px">★★ <span style="font-size:12px;color:#8499b5">2.0</span></div></div>
+          </div>
+          <div style="background:rgba(249,115,22,.06);border:1px solid rgba(249,115,22,.15);border-radius:8px;padding:12px;display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <div style="font-size:12.5px;font-weight:600;color:#fb923c;margin-bottom:3px">Ticket Reopened — Under Escalation Review</div>
+              <div style="font-size:12px;color:#8499b5">This ticket has been escalated to the Billing Team manager. Expected response within 4 hours.</div>
+            </div>
+            <span style="font-size:11px;color:#fb923c;font-weight:600;white-space:nowrap;padding:4px 10px;background:rgba(249,115,22,.1);border-radius:6px;border:1px solid rgba(249,115,22,.2)">Escalated</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ══ PROFILE ══ -->
+    <div id="pg-profile" class="page" style="display:none">
+      <div style="margin-bottom:22px">
+        <h1 class="ff" style="font-size:19px;font-weight:700;color:#e2e8f0">My Profile</h1>
+        <p style="font-size:12.5px;color:#3d5378;margin-top:3px">Account settings and preferences</p>
+      </div>
+      <div style="display:grid;grid-template-columns:260px 1fr;gap:14px">
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="card" style="text-align:center;padding:22px 18px">
+            <div style="width:60px;height:60px;background:linear-gradient(135deg,#3b6fff,#7c4dff);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:22px;font-weight:700;color:#fff">R</div>
+            <div class="ff" style="font-size:15px;font-weight:700;color:#e2e8f0">Ravi Kumar</div>
+            <div style="font-size:12px;color:#3d5378;margin-top:3px">ravi@acmecorp.io</div>
+            <div style="margin-top:8px"><span style="background:rgba(59,111,255,.1);color:#60a5fa;font-size:10.5px;font-weight:600;padding:2px 9px;border-radius:10px;border:1px solid rgba(59,111,255,.18)">Enterprise User</span></div>
+            <div style="font-size:11.5px;color:#1e3047;margin-top:10px">Member since March 2025</div>
+            <button class="btn-s" style="width:100%;justify-content:center;margin-top:12px;font-size:12px">Edit Profile</button>
+          </div>
+          <div class="card">
+            <div style="font-size:11px;font-weight:700;color:#1e3047;text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px">My Statistics</div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <div style="display:flex;justify-content:space-between"><span style="font-size:12.5px;color:#3d5378">Total Tickets</span><span style="font-size:13px;font-weight:600;color:#e2e8f0">24</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="font-size:12.5px;color:#3d5378">Resolved</span><span style="font-size:13px;font-weight:600;color:#34d399">11</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="font-size:12.5px;color:#3d5378">Avg Resolution</span><span style="font-size:13px;font-weight:600;color:#e2e8f0">4.2 hrs</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="font-size:12.5px;color:#3d5378">CSAT Score</span><span style="font-size:13px;font-weight:600;color:#fbbf24">★ 4.7 / 5</span></div>
+              <div style="display:flex;justify-content:space-between"><span style="font-size:12.5px;color:#3d5378">AI Resolved</span><span style="font-size:13px;font-weight:600;color:#a78bfa">2</span></div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div class="card">
+            <div style="font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:16px">Notification Preferences</div>
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:14px;border-bottom:1px solid #101828">
+                <div><div style="font-size:13px;color:#c9d8ee;font-weight:500">Email Notifications</div><div style="font-size:12px;color:#3d5378;margin-top:2px">All ticket status changes and assignments</div></div>
+                <div style="width:38px;height:21px;background:#3b6fff;border-radius:11px;cursor:pointer;position:relative;flex-shrink:0"><div style="position:absolute;top:2px;right:2px;width:17px;height:17px;background:#fff;border-radius:50%"></div></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:14px;border-bottom:1px solid #101828">
+                <div><div style="font-size:13px;color:#c9d8ee;font-weight:500">Browser Push</div><div style="font-size:12px;color:#3d5378;margin-top:2px">Critical P1/P2 alerts in real-time</div></div>
+                <div style="width:38px;height:21px;background:#3b6fff;border-radius:11px;cursor:pointer;position:relative;flex-shrink:0"><div style="position:absolute;top:2px;right:2px;width:17px;height:17px;background:#fff;border-radius:50%"></div></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <div><div style="font-size:13px;color:#c9d8ee;font-weight:500">SLA Breach Alerts</div><div style="font-size:12px;color:#3d5378;margin-top:2px">Notify when ticket approaches SLA deadline</div></div>
+                <div style="width:38px;height:21px;background:#101828;border-radius:11px;cursor:pointer;position:relative;flex-shrink:0"><div style="position:absolute;top:2px;left:2px;width:17px;height:17px;background:#3d5378;border-radius:50%"></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div style="font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:14px">Recent Activity</div>
+            <div class="tl-item"><div class="tl-dot"></div><div style="font-size:12.5px;color:#c9d8ee">Submitted TKT-0001 — Server cluster outage</div><div style="font-size:11.5px;color:#1e3047;margin-top:2px">Today 09:14 UTC</div></div>
+            <div class="tl-item"><div class="tl-dot" style="background:#34d399"></div><div style="font-size:12.5px;color:#c9d8ee">TKT-0007 resolved — Profile picture upload</div><div style="font-size:11.5px;color:#1e3047;margin-top:2px">Today 06:22 UTC</div></div>
+            <div class="tl-item"><div class="tl-dot" style="background:#a78bfa"></div><div style="font-size:12.5px;color:#c9d8ee">TKT-0005 AI auto-resolved (94% confidence)</div><div style="font-size:11.5px;color:#1e3047;margin-top:2px">Yesterday 18:45 UTC</div></div>
+            <div class="tl-item"><div class="tl-dot" style="background:#fbbf24"></div><div style="font-size:12.5px;color:#c9d8ee">Submitted TKT-0006 — Dashboard charts</div><div style="font-size:11.5px;color:#1e3047;margin-top:2px">Yesterday 14:10 UTC</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+</div>
+
+<script>
+const pages = {
+  dashboard:['pg-dashboard'],
+  tickets:['pg-tickets'],
+  detail:['pg-detail'],
+  new:['pg-new'],
+  profile:['pg-profile'],
+  csat:['pg-csat']
+};
+
+function nav(id, el) {
+  Object.values(pages).flat().forEach(p => {
+    const el = document.getElementById(p);
+    if(el) el.style.display = 'none';
+  });
+  const pg = document.getElementById('pg-'+id);
+  if(pg){ pg.style.display='block'; pg.className='page'; }
+
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  if(el) el.classList.add('active');
+
+  if(id==='dashboard') initCharts();
+}
+
+function toggleNotif() {
+  const d = document.getElementById('notifDd');
+  d.style.display = d.style.display==='none' ? 'block' : 'none';
+}
+document.addEventListener('click', e=>{
+  if(!e.target.closest('[onclick="toggleNotif()"]') && !e.target.closest('#notifDd')) {
+    const d=document.getElementById('notifDd');
+    if(d) d.style.display='none';
+  }
+});
+
+let chartsInited = false;
+function initCharts() {
+  if(chartsInited) return;
+  chartsInited = true;
+
+  const cfg = {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{labels:{color:'#3d5378',font:{size:11},boxWidth:10}}},
+    scales:{
+      x:{grid:{color:'rgba(16,24,40,.9)'},ticks:{color:'#1e3047',font:{size:10}}},
+      y:{grid:{color:'rgba(16,24,40,.9)'},ticks:{color:'#1e3047',font:{size:10}}}
+    }
+  };
+
+  new Chart(document.getElementById('trendChart'),{
+    type:'line',
+    data:{
+      labels:['May 1','May 5','May 9','May 13','May 17','May 21','May 27'],
+      datasets:[
+        {label:'Opened',data:[3,5,2,7,4,6,3],borderColor:'#3b6fff',backgroundColor:'rgba(59,111,255,.07)',tension:.4,fill:true,pointBackgroundColor:'#3b6fff',pointRadius:3,pointBorderWidth:0},
+        {label:'Resolved',data:[2,4,3,5,6,4,5],borderColor:'#10b981',backgroundColor:'rgba(16,185,129,.06)',tension:.4,fill:true,pointBackgroundColor:'#10b981',pointRadius:3,pointBorderWidth:0}
+      ]
+    },
+    options:{...cfg}
+  });
+
+  new Chart(document.getElementById('prioChart'),{
+    type:'doughnut',
+    data:{
+      labels:['P1','P2','P3','P4/P5'],
+      datasets:[{data:[3,5,8,8],backgroundColor:['#ef4444','#f97316','#eab308','#3b82f6'],borderWidth:0,hoverOffset:4}]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},cutout:'70%'}
+  });
+}
+
+window.addEventListener('load', initCharts);
+
+function setRating(cardId, stars) {
+  const container = document.getElementById('stars-' + cardId);
+  if(!container) return;
+  container.querySelectorAll('span').forEach((s,i) => {
+    s.style.color = i < stars ? '#fbbf24' : '#1e3047';
+  });
+  container.dataset.rating = stars;
+}
+
+function setResolved(cardId, val, btn) {
+  const container = document.getElementById('res-btns-' + cardId);
+  container.querySelectorAll('button').forEach(b => {
+    b.style.background = 'transparent';
+    b.style.borderColor = '#101828';
+    b.style.color = '#8499b5';
+  });
+  if(val === 'yes') {
+    btn.style.background = 'rgba(52,211,153,.12)';
+    btn.style.borderColor = 'rgba(52,211,153,.3)';
+    btn.style.color = '#34d399';
+    const rp = document.getElementById('reopen-' + cardId);
+    if(rp) rp.style.display = 'none';
+  } else {
+    btn.style.background = 'rgba(248,113,113,.1)';
+    btn.style.borderColor = 'rgba(248,113,113,.3)';
+    btn.style.color = '#f87171';
+    const rp = document.getElementById('reopen-' + cardId);
+    if(rp) rp.style.display = 'block';
+  }
+}
+
+function submitFeedback(cardId) {
+  const card = document.getElementById('csat-card-' + cardId);
+  const rating = document.getElementById('stars-' + cardId)?.dataset.rating || 0;
+  const feedback = document.getElementById('fb-' + cardId)?.value;
+  if(!rating) { alert('Please select a star rating'); return; }
+  // Show submitted state
+  const badge = card.querySelector('[data-star]')?.closest('.card')?.querySelector('span[style*="Pending"]');
+  card.style.borderColor = 'rgba(52,211,153,.2)';
+  // Reload the section after submit
+  nav('csat', document.querySelector('[onclick*=csat]'));
+}
+
+function skipFeedback(cardId) {
+  const card = document.getElementById('csat-card-' + cardId);
+  if(card) card.style.opacity = '0.5';
+}
+
+function reopenTicket(cardId) {
+  alert('Ticket has been reopened and escalated to the assigned team manager.');
+}
+
+</script>
+</body>
+</html>

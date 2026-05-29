@@ -1,0 +1,905 @@
+# COMPLETE BUILD ROADMAP (100% FROM SCRATCH)
+
+# AI TICKETING PLATFORM
+
+This is the EXACT order you should build.
+
+DO NOT skip steps.
+
+---
+
+# PHASE 0 — PROJECT INITIALIZATION
+
+# STEP 1 — Create Main Project Folder
+
+```bash id="st1"
+mkdir nexdesk
+cd nexdesk
+```
+
+---
+
+# STEP 2 — Create Main Structure
+
+```text id="st2"
+nexdesk/
+│
+├── frontend/
+├── backend/
+├── database/
+├── ai_services/
+├── seed_data/
+├── docs/
+└── scripts/
+```
+
+---
+
+# STEP 3 — Initialize Git
+
+```bash id="st3"
+git init
+```
+
+---
+
+# STEP 4 — Create README
+
+```text id="st4"
+README.md
+```
+
+Add:
+
+* architecture
+* setup instructions
+* flows
+
+---
+
+# STEP 5 — Create .gitignore
+
+Ignore:
+
+```text id="st5"
+venv
+node_modules
+.env
+__pycache__
+```
+
+---
+
+# PHASE 1 — DATABASE FOUNDATION
+
+# STEP 6 — Install PostgreSQL
+
+Install PostgreSQL locally.
+
+---
+
+# STEP 7 — Create Database
+
+```text id="st6"
+nexdesk
+```
+
+---
+
+# STEP 8 — Create DB User
+
+```text id="st7"
+nexdesk_user
+```
+
+---
+
+# STEP 9 — Create Database Folder Structure
+
+```text id="st8"
+database/
+│
+├── schema/
+├── migrations/
+├── seed/
+└── queries/
+```
+
+---
+
+# STEP 10 — Create Initial SQL Schema
+
+Create:
+
+```text id="st9"
+users.sql
+tickets.sql
+messages.sql
+```
+
+---
+
+# STEP 11 — Create users Table
+
+Fields:
+
+* id
+* name
+* email
+* password_hash
+* role
+* created_at
+
+---
+
+# STEP 12 — Create tickets Table
+
+Fields:
+
+* ticket_id
+* subject
+* description
+* status
+* user_id
+* created_at
+
+---
+
+# STEP 13 — Create ticket_messages Table
+
+Fields:
+
+* message_id
+* ticket_id
+* sender
+* message
+* timestamp
+
+---
+
+# STEP 14 — Create classification_engine Table
+
+Fields:
+
+* priority
+* category
+* urgency
+* impact
+
+---
+
+# STEP 15 — Create ticket_csat Table
+
+Fields:
+
+* rating
+* feedback
+* resolved
+
+---
+
+# STEP 16 — Create incidents Table
+
+Fields:
+
+* incident_id
+* title
+* severity
+
+---
+
+# STEP 17 — Create embeddings Table
+
+Fields:
+
+* embedding
+* ticket_id
+
+---
+
+# STEP 18 — Create knowledge_base Table
+
+Fields:
+
+* issue
+* resolution
+* category
+
+---
+
+# PHASE 2 — BACKEND FOUNDATION
+
+# STEP 19 — Create Backend Folder
+
+```bash id="st10"
+mkdir backend
+```
+
+---
+
+# STEP 20 — Create Python Virtual Environment
+
+```bash id="st11"
+python -m venv venv
+```
+
+---
+
+# STEP 21 — Activate Virtual Environment
+
+Windows:
+
+```bash id="st12"
+venv\Scripts\activate
+```
+
+---
+
+# STEP 22 — Install FastAPI
+
+```bash id="st13"
+pip install fastapi uvicorn
+```
+
+---
+
+# STEP 23 — Install Database Packages
+
+```bash id="st14"
+pip install sqlalchemy psycopg2-binary
+```
+
+---
+
+# STEP 24 — Install Auth Packages
+
+```bash id="st15"
+pip install python-jose passlib bcrypt
+```
+
+---
+
+# STEP 25 — Create Backend Structure
+
+```text id="st16"
+backend/
+│
+├── app/
+│   ├── api/
+│   ├── models/
+│   ├── schemas/
+│   ├── services/
+│   ├── auth/
+│   ├── db/
+│   └── main.py
+```
+
+---
+
+# STEP 26 — Create FastAPI Entry File
+
+```text id="st17"
+main.py
+```
+
+---
+
+# STEP 27 — Start FastAPI Server
+
+```bash id="st18"
+uvicorn app.main:app --reload
+```
+
+---
+
+# STEP 28 — Create DB Connection File
+
+```text id="st19"
+database.py
+```
+
+---
+
+# STEP 29 — Connect PostgreSQL
+
+Connection string:
+
+```text id="st20"
+postgresql://user:password@localhost/nexdesk
+```
+
+---
+
+# PHASE 3 — AUTH SYSTEM
+
+# STEP 30 — Create User Model
+
+```text id="st21"
+models/user.py
+```
+
+---
+
+# STEP 31 — Create Password Hash Utility
+
+```text id="st22"
+auth/hash.py
+```
+
+---
+
+# STEP 32 — Create JWT Utility
+
+```text id="st23"
+auth/jwt_handler.py
+```
+
+---
+
+# STEP 33 — Create Register API
+
+```text id="st24"
+POST /register
+```
+
+---
+
+# STEP 34 — Create Login API
+
+```text id="st25"
+POST /login
+```
+
+---
+
+# STEP 35 — Create Role Middleware
+
+Roles:
+
+* USER
+* TEAM
+* ADMIN
+
+---
+
+# STEP 36 — Create Protected Routes
+
+```text id="st26"
+ProtectedRoute.jsx
+```
+
+---
+
+# STEP 37 — Create /me API
+
+```text id="st27"
+GET /me
+```
+
+---
+
+# STEP 38 — Create Forgot Password Flow
+
+```text id="st28"
+POST /forgot-password
+```
+
+---
+
+# STEP 39 — Create Email Verification Flow
+
+```text id="st29"
+GET /verify-email
+```
+
+---
+
+# PHASE 4 — FRONTEND FOUNDATION
+
+# STEP 40 — Create React Frontend
+
+```bash id="st30"
+npm create vite@latest frontend
+```
+
+---
+
+# STEP 41 — Install React Packages
+
+```bash id="st31"
+npm install react-router-dom axios
+```
+
+---
+
+# STEP 42 — Install TailwindCSS
+
+```bash id="st32"
+npm install -D tailwindcss postcss autoprefixer
+```
+
+---
+
+# STEP 43 — Create Frontend Structure
+
+```text id="st33"
+src/
+│
+├── components/
+├── pages/
+├── layouts/
+├── routes/
+├── services/
+└── context/
+```
+
+---
+
+# STEP 44 — Convert User HTML Portal
+
+Your uploaded file:
+
+
+Convert into React.
+
+---
+
+# STEP 45 — Convert Team Portal
+
+
+
+---
+
+# STEP 46 — Convert Admin Portal
+
+
+
+---
+
+# STEP 47 — Create Login Page
+
+Route:
+
+```text id="st34"
+/login
+```
+
+---
+
+# STEP 48 — Create Register Page
+
+Route:
+
+```text id="st35"
+/register
+```
+
+---
+
+# STEP 49 — Connect Login API
+
+Use Axios.
+
+---
+
+# STEP 50 — Store JWT Token
+
+Use:
+
+```text id="st36"
+localStorage
+```
+
+Initially.
+
+---
+
+# STEP 51 — Create Role-Based Routing
+
+```text id="st37"
+USER → /user
+TEAM → /team
+ADMIN → /admin
+```
+
+---
+
+# PHASE 5 — SYNTHETIC DATA
+
+# STEP 52 — Install Faker
+
+```bash id="st38"
+pip install faker
+```
+
+---
+
+# STEP 53 — Generate Synthetic Users
+
+50 users.
+
+---
+
+# STEP 54 — Generate Synthetic Tickets
+
+1000 tickets.
+
+---
+
+# STEP 55 — Generate Ticket Messages
+
+Conversation history.
+
+---
+
+# STEP 56 — Generate KB Articles
+
+200 articles.
+
+---
+
+# STEP 57 — Generate CSAT Data
+
+Ratings + feedback.
+
+---
+
+# STEP 58 — Generate Incidents
+
+20 incidents.
+
+---
+
+# PHASE 6 — TICKET CRUD
+
+# STEP 59 — Create Ticket APIs
+
+```text id="st39"
+POST /tickets
+GET /tickets
+GET /tickets/{id}
+```
+
+---
+
+# STEP 60 — Connect User Dashboard
+
+My tickets.
+
+---
+
+# STEP 61 — Create Ticket Details Page
+
+Timeline + messages.
+
+---
+
+# STEP 62 — Create Reopen API
+
+```text id="st40"
+POST /tickets/reopen
+```
+
+---
+
+# STEP 63 — Create Close Ticket API
+
+```text id="st41"
+POST /tickets/close
+```
+
+---
+
+# PHASE 7 — CONVERSATION ENGINE
+
+# STEP 64 — Create Message APIs
+
+```text id="st42"
+POST /messages
+GET /messages
+```
+
+---
+
+# STEP 65 — Build Chat UI
+
+Realtime-like initially.
+
+---
+
+# STEP 66 — Add Attachments
+
+Upload support.
+
+---
+
+# PHASE 8 — EMAIL ENGINE
+
+# STEP 67 — Create IMAP Reader
+
+```text id="st43"
+mail_reader.py
+```
+
+---
+
+# STEP 68 — Create SMTP Sender
+
+```text id="st44"
+mail_sender.py
+```
+
+---
+
+# STEP 69 — Create Email Parser
+
+```text id="st45"
+email_parser.py
+```
+
+---
+
+# STEP 70 — Create Thread Resolver
+
+Detect:
+
+```text id="st46"
+[TKT-ID]
+```
+
+---
+
+# PHASE 9 — VALIDATION ENGINE
+
+# STEP 71 — Create Domain Validator
+
+Allowed domains.
+
+---
+
+# STEP 72 — Create Spam Filter
+
+Reject newsletters/promotions.
+
+---
+
+# STEP 73 — Create Ticket Intent Detector
+
+Real support issue?
+
+---
+
+# PHASE 10 — DUPLICATE ENGINE
+
+# STEP 74 — Install FAISS
+
+```bash id="st47"
+pip install faiss-cpu
+```
+
+---
+
+# STEP 75 — Install Sentence Transformers
+
+```bash id="st48"
+pip install sentence-transformers
+```
+
+---
+
+# STEP 76 — Generate Embeddings
+
+For tickets.
+
+---
+
+# STEP 77 — Create Similarity Search
+
+Cosine similarity.
+
+---
+
+# STEP 78 — Create Duplicate Logic
+
+Threshold:
+
+```text id="st49"
+0.90
+```
+
+---
+
+# PHASE 11 — CLASSIFICATION ENGINE
+
+# STEP 79 — Build AI Classification
+
+Detect:
+
+* category
+* priority
+* urgency
+
+---
+
+# STEP 80 — Store Classification Results
+
+classification_engine table.
+
+---
+
+# PHASE 12 — INCIDENT ENGINE
+
+# STEP 81 — Detect Multi-User Issues
+
+Same issue.
+
+---
+
+# STEP 82 — Create Parent Incident
+
+Link tickets.
+
+---
+
+# PHASE 13 — AI RESOLUTION ENGINE
+
+# STEP 83 — Create KB Retrieval
+
+Use FAISS.
+
+---
+
+# STEP 84 — Generate AI Suggestions
+
+LLM.
+
+---
+
+# STEP 85 — Auto Resolve P3-P5
+
+Confidence threshold:
+
+```text id="st50"
+0.85
+```
+
+---
+
+# STEP 86 — Wait 5 mins Before Closure
+
+User confirmation.
+
+---
+
+# PHASE 14 — CSAT ENGINE
+
+# STEP 87 — Create CSAT Popup
+
+Resolved?
+1–5 rating.
+
+---
+
+# STEP 88 — Create Reopen Logic
+
+Low rating:
+
+```text id="st51"
+<= 2
+```
+
+---
+
+# STEP 89 — Create Admin CSAT Dashboard
+
+Team ratings.
+
+---
+
+# PHASE 15 — KNOWLEDGE BASE
+
+# STEP 90 — Convert Resolved Tickets into KB
+
+Store:
+
+* issue
+* fix
+
+---
+
+# STEP 91 — Create KB Search
+
+User self-help.
+
+---
+
+# PHASE 16 — ANALYTICS
+
+# STEP 92 — Build SLA Analytics
+
+---
+
+# STEP 93 — Build AI Resolution Analytics
+
+---
+
+# STEP 94 — Build Duplicate Reduction Analytics
+
+---
+
+# STEP 95 — Build Incident Analytics
+
+---
+
+# STEP 96 — Build CSAT Analytics
+
+---
+
+# PHASE 17 — REALTIME ENGINE
+
+# STEP 97 — Install WebSockets
+
+```bash id="st52"
+pip install websockets
+```
+
+---
+
+# STEP 98 — Add Live Chat
+
+P1 tickets.
+
+---
+
+# STEP 99 — Add Live Notifications
+
+Realtime updates.
+
+---
+
+# PHASE 18 — DEPLOYMENT
+
+# STEP 100 — Deploy Frontend
+
+```text id="st53"
+Vercel
+```
+
+---
+
+# STEP 101 — Deploy Backend
+
+```text id="st54"
+Render / Railway
+```
+
+---
+
+# STEP 102 — Deploy PostgreSQL
+
+```text id="st55"
+Supabase / Neon
+```
+
+---
+
+# FINAL ADVICE
+
+DO NOT jump ahead.
+
+Follow EXACT order:
+
+```text id="st56"
+Frontend
+→ Backend
+→ DB
+→ Auth
+→ CRUD
+→ Conversations
+→ Email
+→ Validation
+→ AI
+→ Analytics
+```
+
+That is the correct enterprise development path.
