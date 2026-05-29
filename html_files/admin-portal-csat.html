@@ -1,0 +1,1833 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NexusDesk — Admin Portal</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #0a0b0f;
+    --bg2: #0f1117;
+    --bg3: #161820;
+    --bg4: #1c1e28;
+    --border: rgba(255,255,255,0.06);
+    --border2: rgba(255,255,255,0.10);
+    --text: #f0f1f5;
+    --text2: #9ba3b4;
+    --text3: #6b7280;
+    --accent: #6366f1;
+    --accent2: #818cf8;
+    --accent3: #312e81;
+    --green: #10b981;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --blue: #3b82f6;
+    --purple: #8b5cf6;
+    --pink: #ec4899;
+    --cyan: #06b6d4;
+    --sidebar-w: 240px;
+  }
+  .light {
+    --bg: #f5f6fa;
+    --bg2: #ffffff;
+    --bg3: #f0f1f7;
+    --bg4: #e8eaf0;
+    --border: rgba(0,0,0,0.07);
+    --border2: rgba(0,0,0,0.12);
+    --text: #111827;
+    --text2: #4b5563;
+    --text3: #9ca3af;
+    --accent: #4f46e5;
+    --accent2: #6366f1;
+    --accent3: #e0e7ff;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; font-family:'Geist',sans-serif; background:var(--bg); color:var(--text); overflow:hidden; }
+
+  /* ── Layout ── */
+  #app { display:flex; height:100vh; }
+
+  /* ── Sidebar ── */
+  #sidebar {
+    width:var(--sidebar-w); min-width:var(--sidebar-w);
+    background:var(--bg2);
+    border-right:1px solid var(--border);
+    display:flex; flex-direction:column;
+    transition:all .3s cubic-bezier(.4,0,.2,1);
+    z-index:50; position:relative;
+  }
+  #sidebar.collapsed { width:64px; min-width:64px; }
+  .sidebar-logo {
+    padding:20px 16px 16px;
+    display:flex; align-items:center; gap:10px;
+    border-bottom:1px solid var(--border);
+    flex-shrink:0;
+  }
+  .logo-icon {
+    width:34px; height:34px; border-radius:9px;
+    background:linear-gradient(135deg,#6366f1,#8b5cf6);
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0; font-size:15px; font-weight:700; color:#fff;
+    box-shadow:0 4px 12px rgba(99,102,241,.4);
+  }
+  .logo-text { font-size:15px; font-weight:700; white-space:nowrap; overflow:hidden; }
+  .logo-text span { color:var(--accent2); }
+  #sidebar.collapsed .logo-text,
+  #sidebar.collapsed .nav-label,
+  #sidebar.collapsed .sidebar-section-label { display:none; }
+
+  .sidebar-nav { flex:1; padding:12px 8px; overflow-y:auto; }
+  .sidebar-section-label {
+    font-size:10px; font-weight:600; letter-spacing:.08em;
+    color:var(--text3); text-transform:uppercase;
+    padding:8px 8px 4px; margin-top:4px;
+  }
+  .nav-item {
+    display:flex; align-items:center; gap:10px;
+    padding:9px 10px; border-radius:8px; cursor:pointer;
+    color:var(--text2); font-size:13.5px; font-weight:500;
+    transition:all .15s; position:relative; white-space:nowrap;
+    margin-bottom:1px;
+  }
+  .nav-item:hover { background:var(--bg3); color:var(--text); }
+  .nav-item.active {
+    background:rgba(99,102,241,.15); color:var(--accent2);
+    font-weight:600;
+  }
+  .nav-item.active::before {
+    content:''; position:absolute; left:0; top:6px; bottom:6px;
+    width:3px; border-radius:0 3px 3px 0; background:var(--accent);
+  }
+  .nav-badge {
+    margin-left:auto; background:var(--red);
+    color:#fff; font-size:10px; font-weight:700;
+    padding:1px 6px; border-radius:20px; min-width:18px; text-align:center;
+  }
+  .nav-badge.amber { background:var(--amber); color:#000; }
+  .nav-icon { width:16px; height:16px; flex-shrink:0; }
+  #sidebar.collapsed .nav-badge { display:none; }
+
+  .sidebar-bottom {
+    padding:12px 8px; border-top:1px solid var(--border);
+    flex-shrink:0;
+  }
+  .user-card {
+    display:flex; align-items:center; gap:10px;
+    padding:9px 10px; border-radius:8px; cursor:pointer;
+  }
+  .user-card:hover { background:var(--bg3); }
+  .user-avatar {
+    width:32px; height:32px; border-radius:8px;
+    background:linear-gradient(135deg,#6366f1,#ec4899);
+    display:flex; align-items:center; justify-content:center;
+    font-size:12px; font-weight:700; color:#fff; flex-shrink:0;
+  }
+  .user-info { overflow:hidden; }
+  .user-name { font-size:13px; font-weight:600; }
+  .user-role { font-size:11px; color:var(--text3); }
+  #sidebar.collapsed .user-info { display:none; }
+
+  /* ── Main ── */
+  #main { flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden; }
+
+  /* ── Topbar ── */
+  #topbar {
+    height:56px; background:var(--bg2);
+    border-bottom:1px solid var(--border);
+    display:flex; align-items:center; gap:12px;
+    padding:0 20px; flex-shrink:0;
+  }
+  .topbar-toggle {
+    width:32px; height:32px; border-radius:7px;
+    background:transparent; border:1px solid var(--border2);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; color:var(--text2);
+    transition:all .15s;
+  }
+  .topbar-toggle:hover { background:var(--bg3); color:var(--text); }
+  .topbar-breadcrumb { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text2); }
+  .topbar-breadcrumb strong { color:var(--text); font-weight:600; }
+  .topbar-search {
+    margin-left:auto; display:flex; align-items:center; gap:8px;
+    background:var(--bg3); border:1px solid var(--border2);
+    border-radius:8px; padding:0 12px; height:34px; min-width:220px;
+  }
+  .topbar-search input {
+    background:transparent; border:none; outline:none;
+    font-size:13px; color:var(--text); flex:1;
+    font-family:'Geist',sans-serif;
+  }
+  .topbar-search input::placeholder { color:var(--text3); }
+  .topbar-actions { display:flex; align-items:center; gap:8px; }
+  .icon-btn {
+    width:34px; height:34px; border-radius:8px;
+    background:transparent; border:1px solid var(--border2);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; color:var(--text2); position:relative;
+    transition:all .15s;
+  }
+  .icon-btn:hover { background:var(--bg3); color:var(--text); }
+  .notif-dot {
+    position:absolute; top:6px; right:6px;
+    width:7px; height:7px; border-radius:50%;
+    background:var(--red); border:1px solid var(--bg2);
+  }
+
+  /* ── Content ── */
+  #content {
+    flex:1; overflow-y:auto; padding:24px;
+    background:var(--bg);
+  }
+
+  /* ── Sections ── */
+  .section { display:none; }
+  .section.active { display:block; animation:fadeIn .2s ease; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+
+  /* ── Page Title ── */
+  .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; gap:12px; }
+  .page-title { font-size:20px; font-weight:700; }
+  .page-sub { font-size:13px; color:var(--text2); margin-top:2px; }
+  .btn {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:8px 14px; border-radius:8px; font-size:13px;
+    font-weight:600; cursor:pointer; border:none;
+    font-family:'Geist',sans-serif; transition:all .15s;
+  }
+  .btn-primary { background:var(--accent); color:#fff; }
+  .btn-primary:hover { background:var(--accent2); }
+  .btn-ghost { background:transparent; color:var(--text2); border:1px solid var(--border2); }
+  .btn-ghost:hover { background:var(--bg3); color:var(--text); }
+  .btn-sm { padding:5px 10px; font-size:12px; }
+
+  /* ── Cards Grid ── */
+  .cards-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:14px; margin-bottom:22px; }
+  .cards-grid-4 { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:22px; }
+  .cards-grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:22px; }
+  .cards-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:22px; }
+
+  .metric-card {
+    background:var(--bg2); border:1px solid var(--border);
+    border-radius:12px; padding:18px; position:relative; overflow:hidden;
+    transition:all .2s;
+  }
+  .metric-card:hover { border-color:var(--border2); transform:translateY(-1px); }
+  .metric-label { font-size:11.5px; font-weight:600; color:var(--text2); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px; }
+  .metric-value { font-size:26px; font-weight:800; line-height:1; margin-bottom:6px; }
+  .metric-delta { font-size:12px; color:var(--text2); display:flex; align-items:center; gap:4px; }
+  .delta-up { color:var(--green); }
+  .delta-down { color:var(--red); }
+  .metric-icon {
+    position:absolute; top:16px; right:16px;
+    width:36px; height:36px; border-radius:9px;
+    display:flex; align-items:center; justify-content:center;
+    opacity:.9;
+  }
+
+  /* ── Card ── */
+  .card {
+    background:var(--bg2); border:1px solid var(--border);
+    border-radius:12px; overflow:hidden;
+  }
+  .card-header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 18px; border-bottom:1px solid var(--border);
+  }
+  .card-title { font-size:14px; font-weight:700; }
+  .card-body { padding:18px; }
+
+  /* ── Table ── */
+  .data-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .data-table th {
+    text-align:left; padding:10px 14px;
+    font-size:11px; font-weight:700; color:var(--text3);
+    text-transform:uppercase; letter-spacing:.06em;
+    border-bottom:1px solid var(--border); white-space:nowrap;
+  }
+  .data-table td { padding:11px 14px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .data-table tr:last-child td { border-bottom:none; }
+  .data-table tbody tr { transition:background .1s; }
+  .data-table tbody tr:hover { background:var(--bg3); }
+
+  /* ── Badges ── */
+  .badge { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:20px; font-size:11.5px; font-weight:600; }
+  .badge-p1 { background:rgba(239,68,68,.15); color:#f87171; }
+  .badge-p2 { background:rgba(249,115,22,.15); color:#fb923c; }
+  .badge-p3 { background:rgba(245,158,11,.15); color:#fbbf24; }
+  .badge-p4 { background:rgba(59,130,246,.15); color:#60a5fa; }
+  .badge-p5 { background:rgba(107,114,128,.15); color:#9ca3af; }
+  .badge-open { background:rgba(59,130,246,.15); color:#60a5fa; }
+  .badge-progress { background:rgba(139,92,246,.15); color:#a78bfa; }
+  .badge-resolved { background:rgba(16,185,129,.15); color:#34d399; }
+  .badge-closed { background:rgba(107,114,128,.15); color:#9ca3af; }
+  .badge-breach { background:rgba(239,68,68,.15); color:#f87171; }
+  .badge-warning { background:rgba(245,158,11,.15); color:#fbbf24; }
+  .badge-ai { background:rgba(99,102,241,.15); color:#818cf8; }
+  .badge-green { background:rgba(16,185,129,.15); color:#34d399; }
+
+  .dot { width:7px; height:7px; border-radius:50%; display:inline-block; }
+  .dot-red { background:var(--red); }
+  .dot-amber { background:var(--amber); }
+  .dot-green { background:var(--green); }
+  .dot-blue { background:var(--blue); }
+  .dot-purple { background:var(--purple); }
+
+  /* ── Progress ── */
+  .progress-bar { height:5px; border-radius:4px; background:var(--bg4); overflow:hidden; }
+  .progress-fill { height:100%; border-radius:4px; transition:width .4s; }
+
+  /* ── Timeline ── */
+  .timeline { list-style:none; position:relative; }
+  .timeline::before {
+    content:''; position:absolute; left:14px; top:0; bottom:0;
+    width:1px; background:var(--border2);
+  }
+  .tl-item { display:flex; gap:14px; padding-bottom:18px; position:relative; }
+  .tl-dot {
+    width:28px; height:28px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-size:11px; position:relative; z-index:1;
+  }
+  .tl-body { padding-top:4px; }
+  .tl-title { font-size:13px; font-weight:600; }
+  .tl-meta { font-size:11.5px; color:var(--text3); margin-top:2px; }
+
+  /* ── Workflow Node ── */
+  .workflow-canvas {
+    position:relative; padding:20px;
+    min-height:280px; overflow-x:auto;
+  }
+  .wf-row { display:flex; align-items:center; gap:0; flex-wrap:nowrap; margin-bottom:16px; }
+  .wf-node {
+    background:var(--bg3); border:1px solid var(--border2);
+    border-radius:10px; padding:10px 16px; font-size:12px; font-weight:600;
+    white-space:nowrap; color:var(--text); flex-shrink:0; position:relative;
+    cursor:pointer; transition:all .15s;
+  }
+  .wf-node:hover { border-color:var(--accent); color:var(--accent2); }
+  .wf-node.active { background:rgba(99,102,241,.15); border-color:var(--accent); color:var(--accent2); }
+  .wf-node .wf-icon { font-size:14px; margin-right:6px; }
+  .wf-arrow {
+    width:32px; color:var(--text3); font-size:16px;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+
+  /* ── Toggle ── */
+  .toggle-wrap { display:flex; align-items:center; gap:10px; }
+  .toggle {
+    width:36px; height:20px; border-radius:20px;
+    background:var(--bg4); position:relative; cursor:pointer;
+    transition:background .2s; border:1px solid var(--border2);
+  }
+  .toggle.on { background:var(--accent); }
+  .toggle::after {
+    content:''; position:absolute; top:2px; left:2px;
+    width:14px; height:14px; border-radius:50%; background:#fff;
+    transition:transform .2s;
+  }
+  .toggle.on::after { transform:translateX(16px); }
+
+  /* ── Slider ── */
+  .slider-wrap { margin-bottom:14px; }
+  .slider-label { display:flex; justify-content:space-between; font-size:12px; color:var(--text2); margin-bottom:6px; }
+  input[type=range] {
+    -webkit-appearance:none; width:100%; height:4px;
+    border-radius:4px; background:var(--bg4); outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance:none; width:16px; height:16px;
+    border-radius:50%; background:var(--accent); cursor:pointer;
+  }
+
+  /* ── Notification Panel ── */
+  #notif-panel {
+    position:fixed; top:56px; right:12px;
+    width:320px; background:var(--bg2);
+    border:1px solid var(--border2); border-radius:12px;
+    box-shadow:0 20px 60px rgba(0,0,0,.5);
+    z-index:200; display:none; overflow:hidden;
+    animation:fadeIn .15s ease;
+  }
+  #notif-panel.open { display:block; }
+  .notif-item {
+    display:flex; gap:10px; padding:12px 14px;
+    border-bottom:1px solid var(--border);
+    cursor:pointer; transition:background .1s;
+  }
+  .notif-item:hover { background:var(--bg3); }
+  .notif-item:last-child { border-bottom:none; }
+  .notif-icon {
+    width:30px; height:30px; border-radius:8px;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    font-size:13px;
+  }
+  .notif-text { font-size:12.5px; line-height:1.5; }
+  .notif-text strong { font-weight:600; }
+  .notif-time { font-size:11px; color:var(--text3); margin-top:2px; }
+
+  /* ── AI Score ── */
+  .ai-score {
+    display:inline-flex; align-items:center; gap:4px;
+    font-size:11.5px; font-weight:600; color:var(--accent2);
+  }
+
+  /* ── Chart containers ── */
+  .chart-wrap { position:relative; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width:5px; height:5px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:var(--border2); border-radius:10px; }
+
+  /* ── Tabs ── */
+  .tab-bar { display:flex; gap:2px; background:var(--bg3); padding:3px; border-radius:9px; margin-bottom:18px; }
+  .tab-btn {
+    flex:1; padding:7px; border-radius:7px; font-size:12.5px;
+    font-weight:600; cursor:pointer; border:none;
+    background:transparent; color:var(--text2);
+    font-family:'Geist',sans-serif; transition:all .15s;
+    text-align:center;
+  }
+  .tab-btn.active { background:var(--bg2); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,.3); }
+
+  /* ── KV rows ── */
+  .kv-row { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); font-size:13px; }
+  .kv-row:last-child { border-bottom:none; }
+  .kv-key { color:var(--text2); }
+  .kv-val { font-weight:600; }
+
+  /* ── Heatmap ── */
+  .heatmap { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
+  .hm-cell { height:16px; border-radius:3px; cursor:pointer; transition:opacity .15s; }
+  .hm-cell:hover { opacity:.7; }
+
+  /* ── Stat ring ── */
+  .stat-ring-wrap { display:flex; align-items:center; gap:18px; }
+  .stat-ring { width:80px; height:80px; flex-shrink:0; }
+
+  /* Tag */
+  .tag { display:inline-flex; align-items:center; gap:4px; background:var(--bg4); color:var(--text2); padding:3px 8px; border-radius:6px; font-size:11.5px; margin:2px; }
+
+  /* ── Audit row ── */
+  .audit-row { display:flex; gap:12px; padding:11px 0; border-bottom:1px solid var(--border); font-size:12.5px; }
+  .audit-row:last-child { border-bottom:none; }
+  .audit-time { color:var(--text3); white-space:nowrap; min-width:120px; font-family:'Geist Mono',monospace; font-size:11.5px; }
+  .audit-actor { font-weight:600; white-space:nowrap; }
+  .audit-action { color:var(--text2); flex:1; }
+  .audit-entity { color:var(--accent2); }
+
+  /* ── Perf bar ── */
+  .perf-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; font-size:12.5px; }
+  .perf-name { min-width:110px; color:var(--text2); }
+  .perf-bar-wrap { flex:1; height:6px; background:var(--bg4); border-radius:4px; overflow:hidden; }
+  .perf-fill { height:100%; border-radius:4px; }
+  .perf-val { min-width:36px; text-align:right; font-weight:600; font-size:12px; }
+
+  /* responsive */
+  @media(max-width:1100px){
+    .cards-grid-4 { grid-template-columns:repeat(2,1fr); }
+  }
+  @media(max-width:800px){
+    .cards-grid-3,.cards-grid-2 { grid-template-columns:1fr; }
+    .cards-grid-4 { grid-template-columns:repeat(2,1fr); }
+    #content { padding:14px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ══ SIDEBAR ══ -->
+<nav id="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">N</div>
+    <div class="logo-text">Nexus<span>Desk</span></div>
+  </div>
+  <div class="sidebar-nav">
+    <div class="sidebar-section-label">Overview</div>
+    <div class="nav-item active" data-section="dashboard">
+      <i data-lucide="layout-dashboard" class="nav-icon"></i>
+      <span class="nav-label">Dashboard</span>
+    </div>
+    <div class="nav-item" data-section="analytics">
+      <i data-lucide="bar-chart-2" class="nav-icon"></i>
+      <span class="nav-label">Analytics</span>
+    </div>
+    <div class="nav-item" data-section="csat">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      <span class="nav-label">CSAT Analytics</span>
+      <span class="nav-badge amber">!</span>
+    </div>
+    <div class="nav-item" data-section="incidents">
+      <i data-lucide="zap" class="nav-icon"></i>
+      <span class="nav-label">Incidents</span>
+      <span class="nav-badge">3</span>
+    </div>
+
+    <div class="sidebar-section-label">Management</div>
+    <div class="nav-item" data-section="tickets">
+      <i data-lucide="ticket" class="nav-icon"></i>
+      <span class="nav-label">All Tickets</span>
+      <span class="nav-badge amber">14</span>
+    </div>
+    <div class="nav-item" data-section="teams">
+      <i data-lucide="users" class="nav-icon"></i>
+      <span class="nav-label">Teams</span>
+    </div>
+    <div class="nav-item" data-section="workflow">
+      <i data-lucide="git-branch" class="nav-icon"></i>
+      <span class="nav-label">Workflow</span>
+    </div>
+
+    <div class="sidebar-section-label">Configuration</div>
+    <div class="nav-item" data-section="ai-config">
+      <i data-lucide="cpu" class="nav-icon"></i>
+      <span class="nav-label">AI Config</span>
+    </div>
+    <div class="nav-item" data-section="domain">
+      <i data-lucide="globe" class="nav-icon"></i>
+      <span class="nav-label">Domain & Email</span>
+    </div>
+    <div class="nav-item" data-section="sla">
+      <i data-lucide="clock" class="nav-icon"></i>
+      <span class="nav-label">SLA Policies</span>
+    </div>
+
+    <div class="sidebar-section-label">System</div>
+    <div class="nav-item" data-section="audit">
+      <i data-lucide="shield" class="nav-icon"></i>
+      <span class="nav-label">Audit Logs</span>
+    </div>
+    <div class="nav-item" data-section="settings">
+      <i data-lucide="settings" class="nav-icon"></i>
+      <span class="nav-label">Settings</span>
+    </div>
+  </div>
+  <div class="sidebar-bottom">
+    <div class="user-card">
+      <div class="user-avatar">AK</div>
+      <div class="user-info">
+        <div class="user-name">Arjun Kumar</div>
+        <div class="user-role">Super Admin</div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- ══ MAIN ══ -->
+<div id="main">
+
+  <!-- Topbar -->
+  <div id="topbar">
+    <button class="topbar-toggle" id="sidebar-toggle" onclick="toggleSidebar()">
+      <i data-lucide="menu" style="width:16px;height:16px"></i>
+    </button>
+    <div class="topbar-breadcrumb">
+      <span>Admin</span>
+      <span style="color:var(--text3)">›</span>
+      <strong id="bread-label">Dashboard</strong>
+    </div>
+    <div class="topbar-search">
+      <i data-lucide="search" style="width:14px;height:14px;color:var(--text3)"></i>
+      <input type="text" placeholder="Search tickets, users, incidents…"/>
+    </div>
+    <div class="topbar-actions">
+      <div class="icon-btn" onclick="toggleTheme()" title="Toggle theme">
+        <i data-lucide="sun" style="width:15px;height:15px" id="theme-icon"></i>
+      </div>
+      <div class="icon-btn" onclick="toggleNotif()" title="Notifications">
+        <i data-lucide="bell" style="width:15px;height:15px"></i>
+        <span class="notif-dot"></span>
+      </div>
+      <div class="icon-btn" title="Settings">
+        <i data-lucide="settings" style="width:15px;height:15px"></i>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification Panel -->
+  <div id="notif-panel">
+    <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:13px;font-weight:700">Notifications</span>
+      <span style="font-size:11px;color:var(--accent2);cursor:pointer">Mark all read</span>
+    </div>
+    <div class="notif-item">
+      <div class="notif-icon" style="background:rgba(239,68,68,.15);">🔴</div>
+      <div><div class="notif-text"><strong>P1 Incident</strong> — Database cluster failing, 47 tickets linked</div><div class="notif-time">2 min ago</div></div>
+    </div>
+    <div class="notif-item">
+      <div class="notif-icon" style="background:rgba(99,102,241,.15);">🤖</div>
+      <div><div class="notif-text"><strong>AI Auto-resolved</strong> 12 tickets in the last hour</div><div class="notif-time">18 min ago</div></div>
+    </div>
+    <div class="notif-item">
+      <div class="notif-icon" style="background:rgba(245,158,11,.15);">⚠️</div>
+      <div><div class="notif-text"><strong>SLA breach</strong> on TKT-4412 — escalated to Tier 2</div><div class="notif-time">34 min ago</div></div>
+    </div>
+    <div class="notif-item">
+      <div class="notif-icon" style="background:rgba(16,185,129,.15);">✅</div>
+      <div><div class="notif-text">Workflow rule <strong>Auto-route P2</strong> updated by Meera S.</div><div class="notif-time">1 hr ago</div></div>
+    </div>
+    <div class="notif-item">
+      <div class="notif-icon" style="background:rgba(6,182,212,.15);">📊</div>
+      <div><div class="notif-text">Weekly SLA report is ready to download</div><div class="notif-time">3 hr ago</div></div>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div id="content">
+
+    <!-- ═══════════ DASHBOARD ═══════════ -->
+    <div class="section active" id="s-dashboard">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Admin Dashboard</div>
+          <div class="page-sub">Global overview · Last updated 2 minutes ago</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-ghost btn-sm"><i data-lucide="download" style="width:13px;height:13px"></i> Export</button>
+          <button class="btn btn-primary btn-sm"><i data-lucide="refresh-cw" style="width:13px;height:13px"></i> Refresh</button>
+        </div>
+      </div>
+
+      <!-- Top KPIs -->
+      <div class="cards-grid-4">
+        <div class="metric-card">
+          <div class="metric-label">Total Tickets</div>
+          <div class="metric-value" style="color:var(--text)">4,821</div>
+          <div class="metric-delta"><span class="delta-up">↑ 8.3%</span>&nbsp;vs last month</div>
+          <div class="metric-icon" style="background:rgba(99,102,241,.12)"><i data-lucide="ticket" style="width:17px;height:17px;color:var(--accent2)"></i></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Active Incidents</div>
+          <div class="metric-value" style="color:var(--red)">3</div>
+          <div class="metric-delta"><span class="delta-down">↑ 2</span>&nbsp;since yesterday</div>
+          <div class="metric-icon" style="background:rgba(239,68,68,.1)"><i data-lucide="zap" style="width:17px;height:17px;color:var(--red)"></i></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">AI Resolution %</div>
+          <div class="metric-value" style="color:var(--green)">67.4%</div>
+          <div class="metric-delta"><span class="delta-up">↑ 4.1%</span>&nbsp;vs last week</div>
+          <div class="metric-icon" style="background:rgba(16,185,129,.1)"><i data-lucide="cpu" style="width:17px;height:17px;color:var(--green)"></i></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">SLA Compliance</div>
+          <div class="metric-value" style="color:var(--amber)">88.2%</div>
+          <div class="metric-delta"><span class="delta-down">↓ 2.5%</span>&nbsp;vs last week</div>
+          <div class="metric-icon" style="background:rgba(245,158,11,.1)"><i data-lucide="clock" style="width:17px;height:17px;color:var(--amber)"></i></div>
+        </div>
+      </div>
+      <div class="cards-grid-4">
+        <div class="metric-card">
+          <div class="metric-label">Open Tickets</div>
+          <div class="metric-value">1,243</div>
+          <div class="metric-delta" style="margin-top:6px"><div class="progress-bar"><div class="progress-fill" style="width:52%;background:var(--blue)"></div></div></div>
+          <div class="metric-icon" style="background:rgba(59,130,246,.1)"><i data-lucide="circle" style="width:17px;height:17px;color:var(--blue)"></i></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">In Progress</div>
+          <div class="metric-value">678</div>
+          <div class="metric-delta" style="margin-top:6px"><div class="progress-bar"><div class="progress-fill" style="width:28%;background:var(--purple)"></div></div></div>
+          <div class="metric-icon" style="background:rgba(139,92,246,.1)"><i data-lucide="loader" style="width:17px;height:17px;color:var(--purple)"></i></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Resolved (30d)</div>
+          <div class="metric-value">2,756</div>
+          <div class="metric-delta" style="margin-top:6px"><div class="progress-bar"><div class="progress-fill" style="width:78%;background:var(--green)"></div></div></div>
+          <div class="metric-icon" style="background:rgba(16,185,129,.1)"><i data-lucide="check-circle" style="width:17px;height:17px;color:var(--green)"></i></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Duplicate Reduction</div>
+          <div class="metric-value">31.7%</div>
+          <div class="metric-delta"><span class="delta-up">↑ 5.2%</span>&nbsp;AI dedup</div>
+          <div class="metric-icon" style="background:rgba(6,182,212,.1)"><i data-lucide="copy" style="width:17px;height:17px;color:var(--cyan)"></i></div>
+        </div>
+      </div>
+
+      <!-- Charts row -->
+      <div class="cards-grid-2">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Ticket Volume (30 days)</span>
+            <div style="display:flex;gap:6px">
+              <span class="badge badge-open">New</span>
+              <span class="badge badge-resolved">Resolved</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="chart-wrap" style="height:200px"><canvas id="chart-volume"></canvas></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Category Breakdown</span>
+            <span class="badge badge-ai">AI Classified</span>
+          </div>
+          <div class="card-body">
+            <div class="chart-wrap" style="height:200px"><canvas id="chart-category"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CSAT Dashboard Cards -->
+      <div class="cards-grid-3" style="margin-bottom:18px">
+        <div class="metric-card" style="border-top:2px solid var(--amber);cursor:pointer" onclick="showSection('csat')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+            <div class="metric-label">Overall CSAT Score</div>
+            <span style="color:var(--amber);font-size:13px">★</span>
+          </div>
+          <div class="metric-value">4.3<span style="font-size:14px;font-weight:400;color:var(--text2)">/5</span></div>
+          <div class="metric-delta"><span class="delta-up">↑ 0.2</span> this month</div>
+          <div style="height:3px;background:var(--bg3);border-radius:2px;margin-top:10px;overflow:hidden"><div style="width:86%;height:100%;background:var(--amber);border-radius:2px"></div></div>
+        </div>
+        <div class="metric-card" style="border-top:2px solid var(--green)">
+          <div class="metric-label">Best Performing Team</div>
+          <div class="metric-value" style="font-size:18px;color:var(--green)">Infra Team</div>
+          <div class="metric-delta"><span class="delta-up">★ 4.9</span> avg rating · 92% SLA</div>
+        </div>
+        <div class="metric-card" style="border-top:2px solid var(--red)">
+          <div class="metric-label">Lowest Performing Team</div>
+          <div class="metric-value" style="font-size:18px;color:var(--red)">Billing Team</div>
+          <div class="metric-delta"><span class="delta-down">★ 3.1</span> avg · 14% reopen rate</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Avg Resolution Time</div>
+          <div class="metric-value">4.2<span style="font-size:14px;color:var(--text2)">h</span></div>
+          <div class="metric-delta"><span class="delta-up">↓ 0.8h</span> improved</div>
+        </div>
+        <div class="metric-card" style="border-top:2px solid var(--red)">
+          <div class="metric-label">Tickets Reopened</div>
+          <div class="metric-value" style="color:var(--red)">47</div>
+          <div class="metric-delta"><span class="delta-down">↑ 5</span> vs last month</div>
+        </div>
+        <div class="metric-card" style="border-top:2px solid var(--amber)">
+          <div class="metric-label">Pending Feedback</div>
+          <div class="metric-value" style="color:var(--amber)">128</div>
+          <div class="metric-delta">Awaiting user ratings</div>
+        </div>
+      </div>
+
+      <!-- Bottom row -->
+      <div class="cards-grid-3">
+        <div class="card" style="grid-column:span 2">
+          <div class="card-header"><span class="card-title">Active Incidents</span><span class="badge badge-breach">3 Critical</span></div>
+          <div class="card-body" style="padding:0">
+            <table class="data-table">
+              <thead><tr><th>ID</th><th>Title</th><th>Severity</th><th>Linked</th><th>Status</th><th>Owner</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><span style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--accent2)">INC-001</span></td>
+                  <td>Database cluster partial outage</td>
+                  <td><span class="badge badge-p1">P1 Critical</span></td>
+                  <td>47 tickets</td>
+                  <td><span class="badge badge-breach">Active</span></td>
+                  <td>Infra Team</td>
+                </tr>
+                <tr>
+                  <td><span style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--accent2)">INC-002</span></td>
+                  <td>Auth service intermittent failures</td>
+                  <td><span class="badge badge-p2">P2 High</span></td>
+                  <td>23 tickets</td>
+                  <td><span class="badge badge-breach">Active</span></td>
+                  <td>Platform Team</td>
+                </tr>
+                <tr>
+                  <td><span style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--accent2)">INC-003</span></td>
+                  <td>Payment gateway timeouts APAC</td>
+                  <td><span class="badge badge-p2">P2 High</span></td>
+                  <td>11 tickets</td>
+                  <td><span class="badge badge-warning">Monitoring</span></td>
+                  <td>Payments Team</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Team Performance</span></div>
+          <div class="card-body">
+            <div class="perf-row"><div class="perf-name">Infra Team</div><div class="perf-bar-wrap"><div class="perf-fill" style="width:92%;background:var(--green)"></div></div><div class="perf-val">92%</div></div>
+            <div class="perf-row"><div class="perf-name">Platform</div><div class="perf-bar-wrap"><div class="perf-fill" style="width:85%;background:var(--blue)"></div></div><div class="perf-val">85%</div></div>
+            <div class="perf-row"><div class="perf-name">Support L1</div><div class="perf-bar-wrap"><div class="perf-fill" style="width:79%;background:var(--amber)"></div></div><div class="perf-val">79%</div></div>
+            <div class="perf-row"><div class="perf-name">Payments</div><div class="perf-bar-wrap"><div class="perf-fill" style="width:71%;background:var(--amber)"></div></div><div class="perf-val">71%</div></div>
+            <div class="perf-row"><div class="perf-name">Security</div><div class="perf-bar-wrap"><div class="perf-fill" style="width:96%;background:var(--green)"></div></div><div class="perf-val">96%</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ ANALYTICS ═══════════ -->
+    <div class="section" id="s-analytics">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Ticket Analytics</div>
+          <div class="page-sub">Trends, patterns, and heatmaps</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm">Last 30 days ▾</button>
+          <button class="btn btn-ghost btn-sm"><i data-lucide="download" style="width:13px;height:13px"></i> Export</button>
+        </div>
+      </div>
+
+      <div class="cards-grid-4">
+        <div class="metric-card"><div class="metric-label">Avg Resolution Time</div><div class="metric-value">4.2h</div><div class="metric-delta"><span class="delta-up">↓ 0.8h</span> improved</div></div>
+        <div class="metric-card"><div class="metric-label">First Contact Res.</div><div class="metric-value">61%</div><div class="metric-delta"><span class="delta-up">↑ 3%</span> vs last month</div></div>
+        <div class="metric-card"><div class="metric-label">Escalation Rate</div><div class="metric-value">12.3%</div><div class="metric-delta"><span class="delta-down">↑ 1.2%</span> watch this</div></div>
+        <div class="metric-card"><div class="metric-label">User Satisfaction</div><div class="metric-value">4.3<span style="font-size:14px;font-weight:400;color:var(--text2)">/5</span></div><div class="metric-delta"><span class="delta-up">↑ 0.2</span> CSAT</div></div>
+      </div>
+
+      <div class="cards-grid-2">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Resolution Time Trend</span></div>
+          <div class="card-body"><div class="chart-wrap" style="height:210px"><canvas id="chart-restime"></canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Priority Distribution</span></div>
+          <div class="card-body"><div class="chart-wrap" style="height:210px"><canvas id="chart-priority"></canvas></div></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:18px">
+        <div class="card-header"><span class="card-title">Activity Heatmap (tickets/day per category)</span><span class="badge badge-ai">Last 4 weeks</span></div>
+        <div class="card-body">
+          <div style="font-size:11.5px;color:var(--text3);margin-bottom:8px;display:flex;gap:16px">
+            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+          </div>
+          <div id="heatmap-container"></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:11px;color:var(--text3)">
+            <span>Low</span>
+            <div style="display:flex;gap:3px" id="heatmap-legend"></div>
+            <span>High</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">Ticket Trends by Category</span></div>
+        <div class="card-body"><div class="chart-wrap" style="height:220px"><canvas id="chart-trend"></canvas></div></div>
+      </div>
+    </div>
+
+    <!-- ═══════════ INCIDENTS ═══════════ -->
+    <div class="section" id="s-incidents">
+      <div class="page-header">
+        <div><div class="page-title">Incident Management</div><div class="page-sub">Active incidents and root cause tracking</div></div>
+        <button class="btn btn-primary btn-sm"><i data-lucide="plus" style="width:13px;height:13px"></i> Declare Incident</button>
+      </div>
+
+      <div class="cards-grid-4">
+        <div class="metric-card"><div class="metric-label">Active</div><div class="metric-value" style="color:var(--red)">3</div></div>
+        <div class="metric-card"><div class="metric-label">Monitoring</div><div class="metric-value" style="color:var(--amber)">2</div></div>
+        <div class="metric-card"><div class="metric-label">Resolved (30d)</div><div class="metric-value" style="color:var(--green)">18</div></div>
+        <div class="metric-card"><div class="metric-label">Avg MTTR</div><div class="metric-value">2.7h</div></div>
+      </div>
+
+      <div class="card" style="margin-bottom:18px">
+        <div class="card-header"><span class="card-title">INC-001 — Database Cluster Partial Outage</span><span class="badge badge-p1">P1 Critical</span></div>
+        <div class="card-body">
+          <div class="cards-grid-3" style="margin-bottom:14px">
+            <div><div style="font-size:11px;color:var(--text3);margin-bottom:4px">AFFECTED USERS</div><div style="font-size:22px;font-weight:800;color:var(--red)">1,204</div></div>
+            <div><div style="font-size:11px;color:var(--text3);margin-bottom:4px">LINKED TICKETS</div><div style="font-size:22px;font-weight:800">47</div></div>
+            <div><div style="font-size:11px;color:var(--text3);margin-bottom:4px">DURATION</div><div style="font-size:22px;font-weight:800;color:var(--amber)">2h 14m</div></div>
+          </div>
+          <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:12px;margin-bottom:12px">
+            <div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">Root Cause (AI Analysis)</div>
+            <div style="font-size:13px;line-height:1.6">Connection pool exhaustion on primary shard due to unoptimised query introduced in deploy <code style="background:var(--bg4);padding:1px 5px;border-radius:4px;font-family:'Geist Mono',monospace;font-size:11px">v2.41.3</code>. Cascading failure caused replica lag beyond recovery threshold.</div>
+          </div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:6px;font-weight:600">BROADCAST TO AFFECTED USERS</div>
+          <textarea style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px;font-size:13px;color:var(--text);font-family:'Geist',sans-serif;resize:none;outline:none;height:70px">Our engineering team is actively working on resolving database connectivity issues. ETA for full restoration is 30 minutes. We apologize for the disruption.</textarea>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="btn btn-primary btn-sm">Send Broadcast</button>
+            <button class="btn btn-ghost btn-sm">Resolve Incident</button>
+            <button class="btn btn-ghost btn-sm" style="margin-left:auto;color:var(--red);border-color:rgba(239,68,68,.3)">Escalate to P0</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">All Incidents</span></div>
+        <div style="padding:0">
+          <table class="data-table">
+            <thead><tr><th>ID</th><th>Title</th><th>Severity</th><th>Linked Tickets</th><th>Affected Users</th><th>Status</th><th>MTTR</th><th>Owner</th></tr></thead>
+            <tbody>
+              <tr><td><span style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--accent2)">INC-001</span></td><td>Database cluster outage</td><td><span class="badge badge-p1">P1</span></td><td>47</td><td>1,204</td><td><span class="badge badge-breach">Active</span></td><td>—</td><td>Infra</td></tr>
+              <tr><td><span style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--accent2)">INC-002</span></td><td>Auth service failures</td><td><span class="badge badge-p2">P2</span></td><td>23</td><td>389</td><td><span class="badge badge-breach">Active</span></td><td>—</td><td>Platform</td></tr>
+              <tr><td><span style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--accent2)">INC-003</span></td><td>Payment gateway APAC</td><td><span class="badge badge-p2">P2</span></td><td>11</td><td>142</td><td><span class="badge badge-warning">Monitoring</span></td><td>—</td><td>Payments</td></tr>
+              <tr><td><span style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--accent2)">INC-004</span></td><td>Search indexing lag</td><td><span class="badge badge-p3">P3</span></td><td>6</td><td>58</td><td><span class="badge badge-resolved">Resolved</span></td><td>1.2h</td><td>Search</td></tr>
+              <tr><td><span style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--accent2)">INC-005</span></td><td>Email delivery delays</td><td><span class="badge badge-p3">P3</span></td><td>18</td><td>730</td><td><span class="badge badge-resolved">Resolved</span></td><td>3.4h</td><td>Infra</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ TICKETS ═══════════ -->
+    <div class="section" id="s-tickets">
+      <div class="page-header">
+        <div><div class="page-title">All Tickets</div><div class="page-sub">4,821 total · 14 need attention</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm">Filters ▾</button>
+          <button class="btn btn-ghost btn-sm">Export</button>
+        </div>
+      </div>
+
+      <!-- Filter bar -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+        <div class="topbar-search" style="margin-left:0;flex:1;max-width:280px">
+          <i data-lucide="search" style="width:13px;height:13px;color:var(--text3)"></i>
+          <input type="text" placeholder="Search tickets…"/>
+        </div>
+        <select style="background:var(--bg2);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:0 10px;font-size:13px;font-family:'Geist',sans-serif;cursor:pointer;outline:none">
+          <option>All Status</option><option>Open</option><option>In Progress</option><option>Resolved</option>
+        </select>
+        <select style="background:var(--bg2);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:0 10px;font-size:13px;font-family:'Geist',sans-serif;cursor:pointer;outline:none">
+          <option>All Priority</option><option>P1</option><option>P2</option><option>P3</option><option>P4</option>
+        </select>
+        <select style="background:var(--bg2);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:0 10px;font-size:13px;font-family:'Geist',sans-serif;cursor:pointer;outline:none">
+          <option>All Teams</option><option>Infra</option><option>Platform</option><option>Support L1</option>
+        </select>
+      </div>
+
+      <div class="card">
+        <div style="padding:0">
+          <table class="data-table">
+            <thead><tr><th><input type="checkbox" style="accent-color:var(--accent)"/></th><th>Ticket ID</th><th>Subject</th><th>User</th><th>Priority</th><th>Status</th><th>Team</th><th>SLA</th><th>AI</th><th>Created</th></tr></thead>
+            <tbody id="ticket-table-body"></tbody>
+          </table>
+        </div>
+        <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;font-size:12.5px;color:var(--text2)">
+          <span>Showing 1–15 of 4,821 tickets</span>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-ghost btn-sm">← Prev</button>
+            <button class="btn btn-primary btn-sm">Next →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ TEAMS ═══════════ -->
+    <div class="section" id="s-teams">
+      <div class="page-header">
+        <div><div class="page-title">Team Management</div><div class="page-sub">Roles, permissions & workload</div></div>
+        <button class="btn btn-primary btn-sm"><i data-lucide="plus" style="width:13px;height:13px"></i> Add Team</button>
+      </div>
+
+      <div class="cards-grid-3" style="margin-bottom:20px">
+        <div class="card">
+          <div class="card-header" style="border-bottom:none;padding-bottom:8px"><span class="card-title">Infra Team</span><span class="badge badge-green">Active</span></div>
+          <div class="card-body" style="padding-top:0">
+            <div class="kv-row"><span class="kv-key">Members</span><span class="kv-val">8</span></div>
+            <div class="kv-row"><span class="kv-key">Open Tickets</span><span class="kv-val">124</span></div>
+            <div class="kv-row"><span class="kv-key">Avg Resolution</span><span class="kv-val">3.1h</span></div>
+            <div class="kv-row"><span class="kv-key">SLA</span><span class="kv-val" style="color:var(--green)">92%</span></div>
+            <div style="margin-top:10px;display:flex;gap:6px">
+              <button class="btn btn-ghost btn-sm" style="flex:1">Manage</button>
+              <button class="btn btn-ghost btn-sm" style="flex:1">Workload</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header" style="border-bottom:none;padding-bottom:8px"><span class="card-title">Platform Team</span><span class="badge badge-green">Active</span></div>
+          <div class="card-body" style="padding-top:0">
+            <div class="kv-row"><span class="kv-key">Members</span><span class="kv-val">6</span></div>
+            <div class="kv-row"><span class="kv-key">Open Tickets</span><span class="kv-val">89</span></div>
+            <div class="kv-row"><span class="kv-key">Avg Resolution</span><span class="kv-val">4.7h</span></div>
+            <div class="kv-row"><span class="kv-key">SLA</span><span class="kv-val" style="color:var(--blue)">85%</span></div>
+            <div style="margin-top:10px;display:flex;gap:6px">
+              <button class="btn btn-ghost btn-sm" style="flex:1">Manage</button>
+              <button class="btn btn-ghost btn-sm" style="flex:1">Workload</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header" style="border-bottom:none;padding-bottom:8px"><span class="card-title">Support L1</span><span class="badge badge-green">Active</span></div>
+          <div class="card-body" style="padding-top:0">
+            <div class="kv-row"><span class="kv-key">Members</span><span class="kv-val">14</span></div>
+            <div class="kv-row"><span class="kv-key">Open Tickets</span><span class="kv-val">312</span></div>
+            <div class="kv-row"><span class="kv-key">Avg Resolution</span><span class="kv-val">1.8h</span></div>
+            <div class="kv-row"><span class="kv-key">SLA</span><span class="kv-val" style="color:var(--amber)">79%</span></div>
+            <div style="margin-top:10px;display:flex;gap:6px">
+              <button class="btn btn-ghost btn-sm" style="flex:1">Manage</button>
+              <button class="btn btn-ghost btn-sm" style="flex:1">Workload</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cards-grid-2">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Escalation Hierarchy</span></div>
+          <div class="card-body">
+            <div class="timeline">
+              <div class="tl-item"><div class="tl-dot" style="background:rgba(239,68,68,.15);color:var(--red)">1</div><div class="tl-body"><div class="tl-title">Support L1 → Tier 2</div><div class="tl-meta">After 2h breach on P1/P2 · Auto-escalate</div></div></div>
+              <div class="tl-item"><div class="tl-dot" style="background:rgba(245,158,11,.15);color:var(--amber)">2</div><div class="tl-body"><div class="tl-title">Tier 2 → Domain Expert</div><div class="tl-meta">After 4h breach · Notify manager</div></div></div>
+              <div class="tl-item"><div class="tl-dot" style="background:rgba(99,102,241,.15);color:var(--accent2)">3</div><div class="tl-body"><div class="tl-title">Domain Expert → Engineering Lead</div><div class="tl-meta">After 6h · PagerDuty integration</div></div></div>
+              <div class="tl-item"><div class="tl-dot" style="background:rgba(16,185,129,.15);color:var(--green)">4</div><div class="tl-body"><div class="tl-title">Incident Declared</div><div class="tl-meta">Auto-create incident · War room channel</div></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Roles & Permissions</span><button class="btn btn-ghost btn-sm"><i data-lucide="plus" style="width:12px;height:12px"></i> Add Role</button></div>
+          <div class="card-body">
+            <table class="data-table">
+              <thead><tr><th>Role</th><th>Members</th><th>Tickets</th><th>Incidents</th><th>Admin</th></tr></thead>
+              <tbody>
+                <tr><td>Super Admin</td><td>2</td><td>✅</td><td>✅</td><td>✅</td></tr>
+                <tr><td>Team Lead</td><td>5</td><td>✅</td><td>✅</td><td>❌</td></tr>
+                <tr><td>Agent</td><td>28</td><td>✅</td><td>View</td><td>❌</td></tr>
+                <tr><td>Viewer</td><td>9</td><td>View</td><td>View</td><td>❌</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ WORKFLOW ═══════════ -->
+    <div class="section" id="s-workflow">
+      <div class="page-header">
+        <div><div class="page-title">Workflow Engine</div><div class="page-sub">Visual routing, priority & escalation rules</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm">Import</button>
+          <button class="btn btn-primary btn-sm"><i data-lucide="save" style="width:13px;height:13px"></i> Save Rules</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header"><span class="card-title">Email Ingestion Pipeline</span><span class="badge badge-ai">Live</span></div>
+        <div class="workflow-canvas">
+          <div class="wf-row">
+            <div class="wf-node active"><span class="wf-icon">📧</span>Incoming Email</div>
+            <div class="wf-arrow">→</div>
+            <div class="wf-node active"><span class="wf-icon">🌐</span>Domain Validation</div>
+            <div class="wf-arrow">→</div>
+            <div class="wf-node"><span class="wf-icon">🛡</span>Spam Filter</div>
+            <div class="wf-arrow">→</div>
+            <div class="wf-node"><span class="wf-icon">🧠</span>Intent Detection</div>
+            <div class="wf-arrow">→</div>
+            <div class="wf-node"><span class="wf-icon">🔍</span>Duplicate Engine</div>
+          </div>
+          <div class="wf-row" style="margin-left:48px">
+            <div class="wf-arrow" style="transform:rotate(90deg)">→</div>
+          </div>
+          <div class="wf-row">
+            <div class="wf-node"><span class="wf-icon">🔗</span>Similarity Engine</div>
+            <div class="wf-arrow">→</div>
+            <div class="wf-node"><span class="wf-icon">⚡</span>Incident Correlation</div>
+            <div class="wf-arrow">→</div>
+            <div class="wf-node"><span class="wf-icon">🏷</span>Classification</div>
+            <div class="wf-arrow">→</div>
+            <div class="wf-node"><span class="wf-icon">🎯</span>Priority Engine</div>
+            <div class="wf-arrow">→</div>
+            <div class="wf-node"><span class="wf-icon">🚀</span>Routing Engine</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cards-grid-2">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Routing Rules</span><button class="btn btn-ghost btn-sm"><i data-lucide="plus" style="width:12px;height:12px"></i> Add Rule</button></div>
+          <div class="card-body" style="padding:0">
+            <table class="data-table">
+              <thead><tr><th>Rule</th><th>Condition</th><th>Action</th><th>Active</th></tr></thead>
+              <tbody>
+                <tr><td>DB Issues → Infra</td><td>Contains "database", "db"</td><td>Route to Infra</td><td><div class="toggle on" onclick="this.classList.toggle('on')"></div></td></tr>
+                <tr><td>Auth/Login → Platform</td><td>Contains "login", "auth"</td><td>Route to Platform</td><td><div class="toggle on" onclick="this.classList.toggle('on')"></div></td></tr>
+                <tr><td>Billing → Finance</td><td>Contains "invoice", "billing"</td><td>Route to Finance</td><td><div class="toggle on" onclick="this.classList.toggle('on')"></div></td></tr>
+                <tr><td>VIP Users → Tier 2</td><td>Domain = enterprise.com</td><td>Skip L1, → T2</td><td><div class="toggle on" onclick="this.classList.toggle('on')"></div></td></tr>
+                <tr><td>Low Priority → AI</td><td>Priority ≤ P4</td><td>AI auto-resolve</td><td><div class="toggle" onclick="this.classList.toggle('on')"></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Priority Rules</span><button class="btn btn-ghost btn-sm"><i data-lucide="plus" style="width:12px;height:12px"></i> Add Rule</button></div>
+          <div class="card-body" style="padding:0">
+            <table class="data-table">
+              <thead><tr><th>Trigger</th><th>Priority</th><th>SLA</th><th>Auto-Escalate</th></tr></thead>
+              <tbody>
+                <tr><td>Outage keywords + VIP</td><td><span class="badge badge-p1">P1</span></td><td>1h</td><td>✅</td></tr>
+                <tr><td>Outage + normal user</td><td><span class="badge badge-p2">P2</span></td><td>4h</td><td>✅</td></tr>
+                <tr><td>Feature broken + VIP</td><td><span class="badge badge-p2">P2</span></td><td>4h</td><td>❌</td></tr>
+                <tr><td>General issue</td><td><span class="badge badge-p3">P3</span></td><td>24h</td><td>❌</td></tr>
+                <tr><td>Info / How-to</td><td><span class="badge badge-p5">P5</span></td><td>72h</td><td>❌</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ AI CONFIG ═══════════ -->
+    <div class="section" id="s-ai-config">
+      <div class="page-header">
+        <div><div class="page-title">AI Configuration</div><div class="page-sub">Tune AI behaviour, confidence & automation</div></div>
+        <button class="btn btn-primary btn-sm"><i data-lucide="save" style="width:13px;height:13px"></i> Save Config</button>
+      </div>
+
+      <div class="cards-grid-2">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Auto-Resolution Settings</span></div>
+          <div class="card-body">
+            <div class="slider-wrap">
+              <div class="slider-label"><span>AI Confidence Threshold</span><span style="color:var(--accent2);font-weight:700">82%</span></div>
+              <input type="range" min="50" max="99" value="82" oninput="this.previousElementSibling.lastElementChild.textContent=this.value+'%'"/>
+            </div>
+            <div class="slider-wrap">
+              <div class="slider-label"><span>Duplicate Similarity %</span><span style="color:var(--accent2);font-weight:700">75%</span></div>
+              <input type="range" min="50" max="99" value="75" oninput="this.previousElementSibling.lastElementChild.textContent=this.value+'%'"/>
+            </div>
+            <div class="slider-wrap">
+              <div class="slider-label"><span>Auto-close after (days)</span><span style="color:var(--accent2);font-weight:700">7d</span></div>
+              <input type="range" min="1" max="30" value="7" oninput="this.previousElementSibling.lastElementChild.textContent=this.value+'d'"/>
+            </div>
+            <div class="slider-wrap">
+              <div class="slider-label"><span>Max AI response suggestions</span><span style="color:var(--accent2);font-weight:700">3</span></div>
+              <input type="range" min="1" max="10" value="3" oninput="this.previousElementSibling.lastElementChild.textContent=this.value"/>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">AI Feature Toggles</span></div>
+          <div class="card-body">
+            <div class="kv-row"><span class="kv-key">Auto-resolve P4/P5 tickets</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="kv-row"><span class="kv-key">AI duplicate detection</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="kv-row"><span class="kv-key">AI category classification</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="kv-row"><span class="kv-key">AI priority suggestion</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="kv-row"><span class="kv-key">Auto-reply drafts for agents</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="kv-row"><span class="kv-key">Incident correlation</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="kv-row"><span class="kv-key">Semantic similarity search</span><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+            <div class="kv-row"><span class="kv-key">AI audit logging</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">AI Performance Metrics</span><span class="badge badge-ai">Real-time</span></div>
+        <div class="card-body">
+          <div class="cards-grid-4">
+            <div style="text-align:center"><div style="font-size:28px;font-weight:800;color:var(--green)">67.4%</div><div style="font-size:11.5px;color:var(--text2);margin-top:4px">Auto-Resolution Rate</div></div>
+            <div style="text-align:center"><div style="font-size:28px;font-weight:800;color:var(--accent2)">31.7%</div><div style="font-size:11.5px;color:var(--text2);margin-top:4px">Duplicate Reduction</div></div>
+            <div style="text-align:center"><div style="font-size:28px;font-weight:800;color:var(--blue)">94.2%</div><div style="font-size:11.5px;color:var(--text2);margin-top:4px">Classification Accuracy</div></div>
+            <div style="text-align:center"><div style="font-size:28px;font-weight:800;color:var(--amber)">88ms</div><div style="font-size:11.5px;color:var(--text2);margin-top:4px">Avg AI Response Time</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ DOMAIN ═══════════ -->
+    <div class="section" id="s-domain">
+      <div class="page-header">
+        <div><div class="page-title">Domain & Email Controls</div><div class="page-sub">Allowed domains, spam filters, inbox mapping</div></div>
+        <button class="btn btn-primary btn-sm"><i data-lucide="plus" style="width:13px;height:13px"></i> Add Domain</button>
+      </div>
+
+      <div class="cards-grid-2">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Allowed Domains</span></div>
+          <div class="card-body">
+            <table class="data-table">
+              <thead><tr><th>Domain</th><th>Type</th><th>Tickets</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr><td>acme-corp.com</td><td>Enterprise</td><td>1,204</td><td><span class="badge badge-green">Active</span></td></tr>
+                <tr><td>globex.io</td><td>Standard</td><td>389</td><td><span class="badge badge-green">Active</span></td></tr>
+                <tr><td>initech.co</td><td>Standard</td><td>142</td><td><span class="badge badge-green">Active</span></td></tr>
+                <tr><td>soylent.net</td><td>Trial</td><td>28</td><td><span class="badge badge-warning">Trial</span></td></tr>
+                <tr><td>umbrella.org</td><td>Blocked</td><td>—</td><td><span class="badge badge-p1">Blocked</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Email Intent Detection</span></div>
+          <div class="card-body">
+            <div class="kv-row"><span class="kv-key">Support intent detection</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="kv-row"><span class="kv-key">Spam filter (AI-based)</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="kv-row"><span class="kv-key">Out-of-office auto-ignore</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="kv-row"><span class="kv-key">Attachment virus scan</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="kv-row"><span class="kv-key">Thread grouping</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+            <div style="margin-top:14px;font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Inbox Mappings</div>
+            <table class="data-table">
+              <thead><tr><th>Inbox</th><th>Routes to</th></tr></thead>
+              <tbody>
+                <tr><td>support@nexusdesk.io</td><td>Support L1</td></tr>
+                <tr><td>infra@nexusdesk.io</td><td>Infra Team</td></tr>
+                <tr><td>billing@nexusdesk.io</td><td>Finance</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ SLA ═══════════ -->
+    <div class="section" id="s-sla">
+      <div class="page-header">
+        <div><div class="page-title">SLA Policies</div><div class="page-sub">Response & resolution time targets</div></div>
+        <button class="btn btn-primary btn-sm"><i data-lucide="plus" style="width:13px;height:13px"></i> New Policy</button>
+      </div>
+
+      <div class="card">
+        <div style="padding:0">
+          <table class="data-table">
+            <thead><tr><th>Priority</th><th>First Response</th><th>Resolution</th><th>Escalation</th><th>Business Hours</th><th>Compliance (30d)</th><th>Actions</th></tr></thead>
+            <tbody>
+              <tr><td><span class="badge badge-p1">P1 Critical</span></td><td>15 min</td><td>2h</td><td>1h breach</td><td>24/7</td><td><div style="display:flex;align-items:center;gap:8px"><div class="progress-bar" style="width:80px"><div class="progress-fill" style="width:78%;background:var(--amber)"></div></div><span style="font-size:12px;font-weight:600;color:var(--amber)">78%</span></div></td><td><button class="btn btn-ghost btn-sm">Edit</button></td></tr>
+              <tr><td><span class="badge badge-p2">P2 High</span></td><td>1h</td><td>8h</td><td>4h breach</td><td>24/7</td><td><div style="display:flex;align-items:center;gap:8px"><div class="progress-bar" style="width:80px"><div class="progress-fill" style="width:85%;background:var(--blue)"></div></div><span style="font-size:12px;font-weight:600;color:var(--blue)">85%</span></div></td><td><button class="btn btn-ghost btn-sm">Edit</button></td></tr>
+              <tr><td><span class="badge badge-p3">P3 Medium</span></td><td>4h</td><td>24h</td><td>12h breach</td><td>Business</td><td><div style="display:flex;align-items:center;gap:8px"><div class="progress-bar" style="width:80px"><div class="progress-fill" style="width:91%;background:var(--green)"></div></div><span style="font-size:12px;font-weight:600;color:var(--green)">91%</span></div></td><td><button class="btn btn-ghost btn-sm">Edit</button></td></tr>
+              <tr><td><span class="badge badge-p4">P4 Low</span></td><td>8h</td><td>72h</td><td>48h breach</td><td>Business</td><td><div style="display:flex;align-items:center;gap:8px"><div class="progress-bar" style="width:80px"><div class="progress-fill" style="width:96%;background:var(--green)"></div></div><span style="font-size:12px;font-weight:600;color:var(--green)">96%</span></div></td><td><button class="btn btn-ghost btn-sm">Edit</button></td></tr>
+              <tr><td><span class="badge badge-p5">P5 Info</span></td><td>24h</td><td>168h</td><td>None</td><td>Business</td><td><div style="display:flex;align-items:center;gap:8px"><div class="progress-bar" style="width:80px"><div class="progress-fill" style="width:99%;background:var(--green)"></div></div><span style="font-size:12px;font-weight:600;color:var(--green)">99%</span></div></td><td><button class="btn btn-ghost btn-sm">Edit</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ AUDIT ═══════════ -->
+    <div class="section" id="s-audit">
+      <div class="page-header">
+        <div><div class="page-title">Audit Logs</div><div class="page-sub">Ticket changes, AI decisions & user actions</div></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm">Filter by Actor ▾</button>
+          <button class="btn btn-ghost btn-sm">Filter by Type ▾</button>
+          <button class="btn btn-ghost btn-sm"><i data-lucide="download" style="width:13px;height:13px"></i> Export</button>
+        </div>
+      </div>
+
+      <div class="cards-grid-4" style="margin-bottom:20px">
+        <div class="metric-card"><div class="metric-label">Events Today</div><div class="metric-value">1,482</div></div>
+        <div class="metric-card"><div class="metric-label">AI Decisions</div><div class="metric-value" style="color:var(--accent2)">847</div></div>
+        <div class="metric-card"><div class="metric-label">User Actions</div><div class="metric-value" style="color:var(--blue)">423</div></div>
+        <div class="metric-card"><div class="metric-label">Workflow Changes</div><div class="metric-value" style="color:var(--amber)">12</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="tab-bar" style="flex:1;margin-bottom:0">
+            <button class="tab-btn active" onclick="tabSwitch(this,'audit-all')">All Events</button>
+            <button class="tab-btn" onclick="tabSwitch(this,'audit-ai')">AI Decisions</button>
+            <button class="tab-btn" onclick="tabSwitch(this,'audit-user')">User Actions</button>
+            <button class="tab-btn" onclick="tabSwitch(this,'audit-wf')">Workflow</button>
+          </div>
+        </div>
+        <div class="card-body" id="audit-all">
+          <div id="audit-log-list"></div>
+        </div>
+        <div class="card-body" id="audit-ai" style="display:none"><div style="color:var(--text2);font-size:13px">AI decision logs filtered view</div></div>
+        <div class="card-body" id="audit-user" style="display:none"><div style="color:var(--text2);font-size:13px">User action logs filtered view</div></div>
+        <div class="card-body" id="audit-wf" style="display:none"><div style="color:var(--text2);font-size:13px">Workflow change logs</div></div>
+      </div>
+    </div>
+
+
+    <!-- ═══════════ CSAT ANALYTICS ═══════════ -->
+    <div class="section" id="s-csat">
+      <div class="page-header">
+        <div>
+          <div class="page-title">CSAT Analytics</div>
+          <div class="page-sub">Enterprise customer satisfaction reporting &amp; team performance</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <select style="background:var(--bg2);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:0 12px;font-size:13px;font-family:'Geist',sans-serif;cursor:pointer;outline:none;height:34px"><option>All Teams</option><option>Infra Team</option><option>Platform Team</option><option>Billing Team</option><option>Support L1</option><option>Security Team</option></select>
+          <select style="background:var(--bg2);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:0 12px;font-size:13px;font-family:'Geist',sans-serif;cursor:pointer;outline:none;height:34px"><option>Last 30 Days</option><option>Last 90 Days</option><option>This Quarter</option><option>This Year</option></select>
+          <select style="background:var(--bg2);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:0 12px;font-size:13px;font-family:'Geist',sans-serif;cursor:pointer;outline:none;height:34px"><option>All Ratings</option><option>5 Stars</option><option>4 Stars</option><option>3 Stars</option><option>1-2 Stars</option></select>
+          <button class="btn btn-ghost btn-sm"><i data-lucide="download" style="width:13px;height:13px"></i> Export</button>
+        </div>
+      </div>
+
+      <!-- Top metric cards -->
+      <div class="cards-grid-4" style="margin-bottom:18px">
+        <div class="metric-card" style="border-top:2px solid var(--amber)">
+          <div class="metric-label">Overall CSAT</div>
+          <div class="metric-value">4.3<span style="font-size:14px;font-weight:400;color:var(--text2)">/5</span></div>
+          <div class="metric-delta"><span class="delta-up">↑ 0.2</span> vs last period</div>
+          <div style="height:3px;background:var(--bg3);border-radius:2px;margin-top:8px;overflow:hidden"><div style="width:86%;height:100%;background:var(--amber);border-radius:2px"></div></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Satisfaction Rate</div>
+          <div class="metric-value">87<span style="font-size:14px;font-weight:400;color:var(--text2)">%</span></div>
+          <div class="metric-delta"><span class="delta-up">↑ 3%</span> rated 4–5 stars</div>
+        </div>
+        <div class="metric-card" style="border-top:2px solid var(--red)">
+          <div class="metric-label">Reopen Rate</div>
+          <div class="metric-value" style="color:var(--red)">6.8<span style="font-size:14px;font-weight:400;color:var(--text2)">%</span></div>
+          <div class="metric-delta"><span class="delta-down">↑ 0.4%</span> watch closely</div>
+        </div>
+        <div class="metric-card" style="border-top:2px solid var(--red)">
+          <div class="metric-label">Low Satisfaction</div>
+          <div class="metric-value" style="color:var(--red)">34</div>
+          <div class="metric-delta">Rated 1–2 stars this month</div>
+        </div>
+      </div>
+
+      <!-- Low Satisfaction Alerts -->
+      <div class="card" style="margin-bottom:18px;border-color:rgba(239,68,68,.2)">
+        <div class="card-header">
+          <span class="card-title">⚠ Low Satisfaction Alerts</span>
+          <span class="badge badge-breach">Needs Attention</span>
+        </div>
+        <div class="card-body" style="padding:0">
+          <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
+            <div style="width:8px;height:8px;border-radius:50%;background:var(--red);flex-shrink:0"></div>
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:600;color:var(--text)">Billing Team — Repeated Low Ratings</div>
+              <div style="font-size:12px;color:var(--text2);margin-top:2px">7 tickets rated 1–2 stars in last 14 days. Avg CSAT dropped to 3.1</div>
+            </div>
+            <span class="badge badge-p1">Critical</span>
+            <button class="btn btn-ghost btn-sm">View Tickets</button>
+          </div>
+          <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
+            <div style="width:8px;height:8px;border-radius:50%;background:var(--amber);flex-shrink:0"></div>
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:600;color:var(--text)">Support L1 — High Reopen Rate</div>
+              <div style="font-size:12px;color:var(--text2);margin-top:2px">Reopen rate at 12.3%, above 8% threshold. 18 tickets marked "Not Resolved"</div>
+            </div>
+            <span class="badge badge-p2">High</span>
+            <button class="btn btn-ghost btn-sm">View Tickets</button>
+          </div>
+          <div style="padding:14px 16px;display:flex;align-items:center;gap:12px">
+            <div style="width:8px;height:8px;border-radius:50%;background:var(--amber);flex-shrink:0"></div>
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:600;color:var(--text)">TKT-0291, TKT-0318, TKT-0402 — Marked "Not Resolved"</div>
+              <div style="font-size:12px;color:var(--text2);margin-top:2px">3 tickets closed by agents but marked unresolved by users. Pending re-review.</div>
+            </div>
+            <span class="badge badge-p3">Medium</span>
+            <button class="btn btn-ghost btn-sm">Review</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts row 1 -->
+      <div class="cards-grid-2" style="margin-bottom:18px">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Monthly Satisfaction Trend</span>
+            <span class="badge badge-ai">6 months</span>
+          </div>
+          <div class="card-body">
+            <div class="chart-wrap" style="height:200px"><canvas id="chart-csat-trend"></canvas></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Team-wise CSAT Scores</span>
+          </div>
+          <div class="card-body">
+            <div class="chart-wrap" style="height:200px"><canvas id="chart-csat-teams"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts row 2 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:18px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Resolution Time Trend</span></div>
+          <div class="card-body">
+            <div class="chart-wrap" style="height:170px"><canvas id="chart-csat-restime"></canvas></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Reopen Trend</span></div>
+          <div class="card-body">
+            <div class="chart-wrap" style="height:170px"><canvas id="chart-csat-reopen"></canvas></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Ticket Volume vs Satisfaction</span></div>
+          <div class="card-body">
+            <div class="chart-wrap" style="height:170px"><canvas id="chart-csat-vol-sat"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Team CSAT Cards -->
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px">Team CSAT Performance</div>
+      <div class="cards-grid-3" style="margin-bottom:18px">
+        <!-- Team 1 -->
+        <div class="card" style="border-top:3px solid var(--green)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+            <div>
+              <div style="font-size:14px;font-weight:700;color:var(--text)">Infra Team</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px">Infrastructure &amp; DevOps</div>
+            </div>
+            <span class="badge badge-resolved">Top Performer</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+            <div style="background:var(--bg3);border-radius:7px;padding:9px">
+              <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Avg CSAT</div>
+              <div style="font-size:20px;font-weight:700;color:var(--green)">4.9 ★</div>
+            </div>
+            <div style="background:var(--bg3);border-radius:7px;padding:9px">
+              <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Tickets</div>
+              <div style="font-size:20px;font-weight:700;color:var(--text)">247</div>
+            </div>
+            <div style="background:var(--bg3);border-radius:7px;padding:9px">
+              <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Avg Res. Time</div>
+              <div style="font-size:16px;font-weight:700;color:var(--text)">3.1h</div>
+            </div>
+            <div style="background:var(--bg3);border-radius:7px;padding:9px">
+              <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Reopen %</div>
+              <div style="font-size:16px;font-weight:700;color:var(--green)">2.4%</div>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:4px"><span>Satisfaction rate</span><span style="color:var(--green);font-weight:600">98%</span></div>
+            <div style="height:4px;background:var(--bg3);border-radius:2px"><div style="width:98%;height:100%;background:var(--green);border-radius:2px"></div></div>
+          </div>
+        </div>
+
+        <!-- Team 2 -->
+        <div class="card" style="border-top:3px solid var(--blue)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+            <div>
+              <div style="font-size:14px;font-weight:700;color:var(--text)">Platform Team</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px">Backend &amp; APIs</div>
+            </div>
+            <span class="badge badge-open">Stable</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+            <div style="background:var(--bg3);border-radius:7px;padding:9px">
+              <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Avg CSAT</div>
+              <div style="font-size:20px;font-weight:700;color:var(--blue)">4.5 ★</div>
+            </div>
+            <div style="background:var(--bg3);border-radius:7px;padding:9px">
+              <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Tickets</div>
+              <div style="font-size:20px;font-weight:700;color:var(--text)">183</div>
+            </div>
+            <div style="background:var(--bg3);border-radius:7px;padding:9px">
+              <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Avg Res. Time</div>
+              <div style="font-size:16px;font-weight:700;color:var(--text)">4.7h</div>
+            </div>
+            <div style="background:var(--bg3);border-radius:7px;padding:9px">
+              <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Reopen %</div>
+              <div style="font-size:16px;font-weight:700;color:var(--amber)">5.1%</div>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:4px"><span>Satisfaction rate</span><span style="color:var(--blue);font-weight:600">90%</span></div>
+            <div style="height:4px;background:var(--bg3);border-radius:2px"><div style="width:90%;height:100%;background:var(--blue);border-radius:2px"></div></div>
+          </div>
+        </div>
+
+        <!-- Team 3 -->
+        <div class="card" style="border-top:3px solid var(--red)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+            <div>
+              <div style="font-size:14px;font-weight:700;color:var(--text)">Billing Team</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px">Payments &amp; Subscriptions</div>
+            </div>
+            <span class="badge badge-breach">Needs Review</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+            <div style="background:var(--bg3);border-radius:7px;padding:9px">
+              <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Avg CSAT</div>
+              <div style="font-size:20px;font-weight:700;color:var(--red)">3.1 ★</div>
+            </div>
+            <div style="background:var(--bg3);border-radius:7px;padding:9px">
+              <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Tickets</div>
+              <div style="font-size:20px;font-weight:700;color:var(--text)">94</div>
+            </div>
+            <div style="background:var(--bg3);border-radius:7px;padding:9px">
+              <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Avg Res. Time</div>
+              <div style="font-size:16px;font-weight:700;color:var(--red)">7.8h</div>
+            </div>
+            <div style="background:var(--bg3);border-radius:7px;padding:9px">
+              <div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Reopen %</div>
+              <div style="font-size:16px;font-weight:700;color:var(--red)">14.2%</div>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:4px"><span>Satisfaction rate</span><span style="color:var(--red);font-weight:600">62%</span></div>
+            <div style="height:4px;background:var(--bg3);border-radius:2px"><div style="width:62%;height:100%;background:var(--red);border-radius:2px"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Team Performance Table -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Full Team Performance Table</span>
+          <div style="display:flex;gap:6px">
+            <select style="background:var(--bg3);border:1px solid var(--border2);color:var(--text2);border-radius:6px;padding:3px 8px;font-size:12px;font-family:'Geist',sans-serif;cursor:pointer;outline:none"><option>Sort by CSAT</option><option>Sort by Volume</option><option>Sort by Resolution Time</option></select>
+            <button class="btn btn-ghost btn-sm"><i data-lucide="download" style="width:12px;height:12px"></i> CSV</button>
+          </div>
+        </div>
+        <div style="padding:0">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Team</th>
+                <th>Avg CSAT</th>
+                <th>Avg Res. Time</th>
+                <th>Total Resolved</th>
+                <th>Reopened</th>
+                <th>User Satisfaction %</th>
+                <th>SLA Success %</th>
+                <th>Low Sat. Count</th>
+                <th>Trend</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="font-weight:600;color:var(--text)">Infra Team</td>
+                <td><span style="color:var(--green);font-weight:700">★ 4.9</span></td>
+                <td>3.1h</td>
+                <td>247</td>
+                <td><span style="color:var(--green)">6</span></td>
+                <td><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:4px;background:var(--bg3);border-radius:2px;min-width:60px"><div style="width:98%;height:100%;background:var(--green);border-radius:2px"></div></div><span style="color:var(--green);font-weight:600;font-size:12px">98%</span></div></td>
+                <td><span style="color:var(--green)">92%</span></td>
+                <td><span style="color:var(--green)">2</span></td>
+                <td><span style="color:var(--green);font-size:12px">↑ Improving</span></td>
+              </tr>
+              <tr>
+                <td style="font-weight:600;color:var(--text)">Security Team</td>
+                <td><span style="color:var(--green);font-weight:700">★ 4.8</span></td>
+                <td>2.8h</td>
+                <td>131</td>
+                <td><span style="color:var(--green)">3</span></td>
+                <td><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:4px;background:var(--bg3);border-radius:2px;min-width:60px"><div style="width:96%;height:100%;background:var(--green);border-radius:2px"></div></div><span style="color:var(--green);font-weight:600;font-size:12px">96%</span></div></td>
+                <td><span style="color:var(--green)">96%</span></td>
+                <td><span style="color:var(--green)">1</span></td>
+                <td><span style="color:var(--green);font-size:12px">↑ Improving</span></td>
+              </tr>
+              <tr>
+                <td style="font-weight:600;color:var(--text)">Platform Team</td>
+                <td><span style="color:var(--blue);font-weight:700">★ 4.5</span></td>
+                <td>4.7h</td>
+                <td>183</td>
+                <td><span style="color:var(--amber)">9</span></td>
+                <td><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:4px;background:var(--bg3);border-radius:2px;min-width:60px"><div style="width:90%;height:100%;background:var(--blue);border-radius:2px"></div></div><span style="color:var(--blue);font-weight:600;font-size:12px">90%</span></div></td>
+                <td><span style="color:var(--blue)">85%</span></td>
+                <td><span style="color:var(--amber)">5</span></td>
+                <td><span style="color:var(--text2);font-size:12px">→ Stable</span></td>
+              </tr>
+              <tr>
+                <td style="font-weight:600;color:var(--text)">Support L1</td>
+                <td><span style="color:var(--amber);font-weight:700">★ 3.8</span></td>
+                <td>5.2h</td>
+                <td>312</td>
+                <td><span style="color:var(--red)">38</span></td>
+                <td><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:4px;background:var(--bg3);border-radius:2px;min-width:60px"><div style="width:76%;height:100%;background:var(--amber);border-radius:2px"></div></div><span style="color:var(--amber);font-weight:600;font-size:12px">76%</span></div></td>
+                <td><span style="color:var(--amber)">79%</span></td>
+                <td><span style="color:var(--amber)">12</span></td>
+                <td><span style="color:var(--amber);font-size:12px">↓ Declining</span></td>
+              </tr>
+              <tr>
+                <td style="font-weight:600;color:var(--text)">Payments Team</td>
+                <td><span style="color:var(--amber);font-weight:700">★ 3.6</span></td>
+                <td>6.1h</td>
+                <td>142</td>
+                <td><span style="color:var(--red)">21</span></td>
+                <td><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:4px;background:var(--bg3);border-radius:2px;min-width:60px"><div style="width:72%;height:100%;background:var(--amber);border-radius:2px"></div></div><span style="color:var(--amber);font-weight:600;font-size:12px">72%</span></div></td>
+                <td><span style="color:var(--amber)">71%</span></td>
+                <td><span style="color:var(--amber)">9</span></td>
+                <td><span style="color:var(--text2);font-size:12px">→ Stable</span></td>
+              </tr>
+              <tr>
+                <td style="font-weight:600;color:var(--text)">Billing Team</td>
+                <td><span style="color:var(--red);font-weight:700">★ 3.1</span></td>
+                <td>7.8h</td>
+                <td>94</td>
+                <td><span style="color:var(--red)">13</span></td>
+                <td><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:4px;background:var(--bg3);border-radius:2px;min-width:60px"><div style="width:62%;height:100%;background:var(--red);border-radius:2px"></div></div><span style="color:var(--red);font-weight:600;font-size:12px">62%</span></div></td>
+                <td><span style="color:var(--red)">68%</span></td>
+                <td><span style="color:var(--red)">7</span></td>
+                <td><span style="color:var(--red);font-size:12px">↓ Critical</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ SETTINGS ═══════════ -->
+    <div class="section" id="s-settings">
+      <div class="page-header">
+        <div><div class="page-title">System Settings</div><div class="page-sub">Portal configuration & integrations</div></div>
+        <button class="btn btn-primary btn-sm"><i data-lucide="save" style="width:13px;height:13px"></i> Save All</button>
+      </div>
+
+      <div class="cards-grid-2">
+        <div class="card">
+          <div class="card-header"><span class="card-title">General Settings</span></div>
+          <div class="card-body">
+            <div class="kv-row"><span class="kv-key">System Name</span><input style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:4px 8px;font-size:13px;font-family:'Geist',sans-serif;outline:none;width:160px" value="NexusDesk"/></div>
+            <div class="kv-row"><span class="kv-key">Default Language</span><span class="kv-val">English (US)</span></div>
+            <div class="kv-row"><span class="kv-key">Timezone</span><span class="kv-val">Asia/Kolkata (IST)</span></div>
+            <div class="kv-row"><span class="kv-key">Date Format</span><span class="kv-val">DD/MM/YYYY</span></div>
+            <div class="kv-row"><span class="kv-key">Dark Mode (default)</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+            <div class="kv-row"><span class="kv-key">Maintenance mode</span><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Integrations</span></div>
+          <div class="card-body">
+            <div class="kv-row"><span class="kv-key">Slack</span><span class="badge badge-green">Connected</span></div>
+            <div class="kv-row"><span class="kv-key">PagerDuty</span><span class="badge badge-green">Connected</span></div>
+            <div class="kv-row"><span class="kv-key">Jira</span><span class="badge badge-green">Connected</span></div>
+            <div class="kv-row"><span class="kv-key">GitHub</span><span class="badge badge-warning">Pending</span></div>
+            <div class="kv-row"><span class="kv-key">Datadog</span><span class="badge badge-p1">Disconnected</span></div>
+            <div class="kv-row"><span class="kv-key">Webhook URL</span><input style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:4px 8px;font-size:12px;font-family:'Geist Mono',monospace;outline:none;width:180px" value="https://hooks.nexus.io/…"/></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+// ─── Data ───
+const TICKETS = [
+  {id:'TKT-4891',subject:'Cannot connect to VPN after update',user:'Rahul M.',pri:'P1',status:'open',team:'Infra',sla:'0h 22m',ai:94,created:'May 27'},
+  {id:'TKT-4890',subject:'Dashboard showing wrong metrics',user:'Sarah L.',pri:'P2',status:'progress',team:'Platform',sla:'3h 10m',ai:88,created:'May 27'},
+  {id:'TKT-4889',subject:'Invoice not generated for May',user:'Amit K.',pri:'P2',status:'progress',team:'Finance',sla:'2h 48m',ai:72,created:'May 27'},
+  {id:'TKT-4888',subject:'Password reset email not received',user:'Priya R.',pri:'P3',status:'open',team:'Support L1',sla:'18h 00m',ai:97,created:'May 26'},
+  {id:'TKT-4887',subject:'API rate limit errors on mobile',user:'Dev Team',pri:'P2',status:'breach',team:'Platform',sla:'BREACH',ai:61,created:'May 26'},
+  {id:'TKT-4886',subject:'SSO login broken for Okta users',user:'TechCorp',pri:'P1',status:'open',team:'Auth',sla:'0h 55m',ai:85,created:'May 26'},
+  {id:'TKT-4885',subject:'CSV export hangs on large datasets',user:'Analytics',pri:'P3',status:'progress',team:'Data',sla:'20h 30m',ai:79,created:'May 25'},
+  {id:'TKT-4884',subject:'Mobile app crashes on iOS 17.4',user:'QA Team',pri:'P2',status:'open',team:'Mobile',sla:'5h 00m',ai:66,created:'May 25'},
+  {id:'TKT-4883',subject:'How to bulk-import users via CSV?',user:'Shruti V.',pri:'P5',status:'resolved',team:'AI Bot',sla:'—',ai:100,created:'May 25'},
+  {id:'TKT-4882',subject:'Webhook payloads duplicated',user:'Dev Team',pri:'P3',status:'resolved',team:'Platform',sla:'—',ai:89,created:'May 24'},
+  {id:'TKT-4881',subject:'Missing attachment in ticket thread',user:'Ananya S.',pri:'P4',status:'resolved',team:'AI Bot',sla:'—',ai:93,created:'May 24'},
+  {id:'TKT-4880',subject:'Custom field not saving',user:'Ops Team',pri:'P3',status:'open',team:'Platform',sla:'22h 00m',ai:74,created:'May 23'},
+  {id:'TKT-4879',subject:'Notification emails going to spam',user:'Marketing',pri:'P4',status:'progress',team:'Infra',sla:'48h 00m',ai:88,created:'May 23'},
+  {id:'TKT-4878',subject:'Dark mode flicker on Safari',user:'Design',pri:'P4',status:'open',team:'Frontend',sla:'70h 00m',ai:91,created:'May 22'},
+  {id:'TKT-4877',subject:'Data export limit too low (500 rows)',user:'Sales Team',pri:'P3',status:'resolved',team:'AI Bot',sla:'—',ai:96,created:'May 22'},
+];
+
+const AUDIT_LOGS = [
+  {time:'2026-05-27 14:32:11',actor:'AI Engine',action:'Auto-resolved ticket',entity:'TKT-4881',type:'ai'},
+  {time:'2026-05-27 14:28:05',actor:'Arjun Kumar',action:'Updated routing rule',entity:'Route: Auth→Platform',type:'wf'},
+  {time:'2026-05-27 14:19:33',actor:'AI Engine',action:'Detected duplicate — merged into',entity:'TKT-4890',type:'ai'},
+  {time:'2026-05-27 14:11:48',actor:'Meera Shah',action:'Escalated ticket to P1',entity:'TKT-4887',type:'user'},
+  {time:'2026-05-27 13:58:22',actor:'AI Engine',action:'Auto-classified category as "Auth" with 94% confidence',entity:'TKT-4886',type:'ai'},
+  {time:'2026-05-27 13:44:10',actor:'System',action:'SLA breach triggered — escalation sent',entity:'TKT-4887',type:'system'},
+  {time:'2026-05-27 13:30:00',actor:'Ravi T.',action:'Resolved ticket',entity:'TKT-4882',type:'user'},
+  {time:'2026-05-27 13:22:17',actor:'AI Engine',action:'Incident correlation — linked 3 new tickets',entity:'INC-001',type:'ai'},
+  {time:'2026-05-27 12:58:44',actor:'Arjun Kumar',action:'Updated AI confidence threshold to 82%',entity:'AI Config',type:'wf'},
+  {time:'2026-05-27 12:30:01',actor:'AI Engine',action:'Broadcast drafted for incident',entity:'INC-001',type:'ai'},
+  {time:'2026-05-27 11:48:33',actor:'Priya N.',action:'Added new domain whitelist entry',entity:'globex.io',type:'user'},
+  {time:'2026-05-27 10:22:09',actor:'AI Engine',action:'Priority upgraded P3→P2 based on sentiment analysis',entity:'TKT-4880',type:'ai'},
+];
+
+// ─── Sidebar nav ───
+document.querySelectorAll('.nav-item[data-section]').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+    const sec = item.dataset.section;
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById('s-' + sec).classList.add('active');
+    document.getElementById('bread-label').textContent = item.querySelector('.nav-label')?.textContent || sec;
+    // lazy-init charts
+    if(sec==='analytics') initAnalyticsCharts();
+    if(sec==='dashboard') initDashCharts();
+  });
+});
+
+function toggleSidebar(){
+  document.getElementById('sidebar').classList.toggle('collapsed');
+}
+
+// ─── Theme ───
+function toggleTheme(){
+  document.documentElement.classList.toggle('light');
+  const icon = document.getElementById('theme-icon');
+  icon.setAttribute('data-lucide', document.documentElement.classList.contains('light') ? 'moon' : 'sun');
+  lucide.createIcons();
+  // re-render charts
+  setTimeout(()=>{ initDashCharts(); if(chartsInitialized.analytics) initAnalyticsCharts(); }, 50);
+}
+
+// ─── Notif ───
+function toggleNotif(){
+  document.getElementById('notif-panel').classList.toggle('open');
+}
+document.addEventListener('click', e => {
+  if(!e.target.closest('#notif-panel') && !e.target.closest('.icon-btn')) {
+    document.getElementById('notif-panel').classList.remove('open');
+  }
+});
+
+// ─── Tabs ───
+function tabSwitch(btn, id){
+  btn.parentElement.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const card = btn.closest('.card');
+  card.querySelectorAll('.card-body').forEach(b=>b.style.display='none');
+  document.getElementById(id).style.display='block';
+}
+
+// ─── Ticket table ───
+function buildTicketTable(){
+  const tbody = document.getElementById('ticket-table-body');
+  const priClass = {P1:'badge-p1',P2:'badge-p2',P3:'badge-p3',P4:'badge-p4',P5:'badge-p5'};
+  const statusClass = {open:'badge-open',progress:'badge-progress',resolved:'badge-resolved',breach:'badge-breach'};
+  const statusLabel = {open:'Open',progress:'In Progress',resolved:'Resolved',breach:'SLA Breach'};
+  tbody.innerHTML = TICKETS.map(t=>`
+    <tr>
+      <td><input type="checkbox" style="accent-color:var(--accent)"/></td>
+      <td><span style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--accent2)">${t.id}</span></td>
+      <td style="max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.subject}</td>
+      <td>${t.user}</td>
+      <td><span class="badge ${priClass[t.pri]}">${t.pri}</span></td>
+      <td><span class="badge ${statusClass[t.status]}">${statusLabel[t.status]}</span></td>
+      <td>${t.team}</td>
+      <td style="font-size:12px;font-family:'Geist Mono',monospace;color:${t.sla==='BREACH'?'var(--red)':t.sla==='—'?'var(--text3)':'var(--text2)'}">${t.sla}</td>
+      <td><span class="ai-score">🤖 ${t.ai}%</span></td>
+      <td style="font-size:12px;color:var(--text3)">${t.created}</td>
+    </tr>
+  `).join('');
+}
+buildTicketTable();
+
+// ─── Audit log ───
+function buildAuditLog(){
+  const el = document.getElementById('audit-log-list');
+  const typeColor = {ai:'var(--accent2)',user:'var(--blue)',wf:'var(--amber)',system:'var(--red)'};
+  const typeLabel = {ai:'AI',user:'User',wf:'Workflow',system:'System'};
+  el.innerHTML = AUDIT_LOGS.map(l=>`
+    <div class="audit-row">
+      <span class="audit-time">${l.time}</span>
+      <span class="badge" style="background:rgba(0,0,0,.2);color:${typeColor[l.type]};font-size:10.5px;white-space:nowrap">${typeLabel[l.type]}</span>
+      <span class="audit-actor">${l.actor}</span>
+      <span class="audit-action">${l.action} <span class="audit-entity">${l.entity}</span></span>
+    </div>
+  `).join('');
+}
+buildAuditLog();
+
+// ─── Heatmap ───
+function buildHeatmap(){
+  const c = document.getElementById('heatmap-container');
+  const intensities = [2,5,8,3,11,1,0, 6,9,14,7,12,2,1, 10,15,9,13,8,3,2, 4,11,7,16,10,5,1];
+  const max = Math.max(...intensities);
+  const colors = ['#1a1d2e','#232666','#3730a3','#4f46e5','#6366f1','#818cf8'];
+  let html = '<div class="heatmap">';
+  intensities.forEach(v => {
+    const idx = Math.round((v/max)*5);
+    html += `<div class="hm-cell" style="background:${colors[idx]}" title="${v} tickets"></div>`;
+  });
+  html += '</div>';
+  c.innerHTML = html;
+  const leg = document.getElementById('heatmap-legend');
+  leg.innerHTML = colors.map(c=>`<div style="width:12px;height:12px;border-radius:2px;background:${c}"></div>`).join('');
+}
+buildHeatmap();
+
+// ─── Charts ───
+const chartsInitialized = {};
+const isDark = () => !document.documentElement.classList.contains('light');
+const gc = (opacity) => isDark() ? `rgba(255,255,255,${opacity})` : `rgba(0,0,0,${opacity})`;
+const chartDefaults = {
+  plugins:{ legend:{ labels:{ color:() => gc(0.5), font:{ family:'Geist', size:11 } } } },
+  scales:{ x:{ grid:{ color:() => gc(0.05) }, ticks:{ color:() => gc(0.45), font:{size:11} } },
+           y:{ grid:{ color:() => gc(0.05) }, ticks:{ color:() => gc(0.45), font:{size:11} } } }
+};
+
+let dashCharts = {};
+function initDashCharts(){
+  if(dashCharts.vol) { dashCharts.vol.destroy(); dashCharts.cat.destroy(); }
+  const days = Array.from({length:30},(_,i)=>{const d=new Date('2026-05-27'); d.setDate(d.getDate()-29+i); return d.getDate()+'/'+(d.getMonth()+1)});
+  const rng = (mn,mx)=>Math.floor(Math.random()*(mx-mn)+mn);
+  dashCharts.vol = new Chart(document.getElementById('chart-volume'), {
+    type:'line',
+    data:{
+      labels: days,
+      datasets:[
+        {label:'New',data:days.map(()=>rng(30,120)),borderColor:'#6366f1',backgroundColor:'rgba(99,102,241,.1)',fill:true,tension:.4,borderWidth:2,pointRadius:0},
+        {label:'Resolved',data:days.map(()=>rng(25,110)),borderColor:'#10b981',backgroundColor:'rgba(16,185,129,.08)',fill:true,tension:.4,borderWidth:2,pointRadius:0}
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{color:gc(0.5),font:{family:'Geist',size:11},boxWidth:10}}},scales:{x:{grid:{color:gc(0.04)},ticks:{color:gc(0.4),font:{size:10},maxTicksLimit:8}},y:{grid:{color:gc(0.04)},ticks:{color:gc(0.4),font:{size:10}}}}}
+  });
+  dashCharts.cat = new Chart(document.getElementById('chart-category'), {
+    type:'doughnut',
+    data:{
+      labels:['Infrastructure','Auth & Login','Billing','Data/Analytics','Mobile App','Other'],
+      datasets:[{data:[28,19,14,12,9,18],backgroundColor:['#6366f1','#3b82f6','#f59e0b','#10b981','#ec4899','#6b7280'],borderWidth:0,hoverOffset:6}]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:gc(0.5),font:{family:'Geist',size:11},boxWidth:10,padding:8}}}}
+  });
+}
+
+function initAnalyticsCharts(){
+  if(chartsInitialized.analytics) return;
+  chartsInitialized.analytics = true;
+  const mo = ['Dec','Jan','Feb','Mar','Apr','May'];
+  new Chart(document.getElementById('chart-restime'), {
+    type:'bar',
+    data:{labels:mo,datasets:[{label:'Avg Res. Time (h)',data:[6.8,6.1,5.4,4.9,4.6,4.2],backgroundColor:'rgba(99,102,241,.6)',borderRadius:5,borderSkipped:false}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:gc(0.5),font:{family:'Geist',size:11},boxWidth:10}}},scales:{x:{grid:{color:gc(0.04)},ticks:{color:gc(0.4),font:{size:11}}},y:{grid:{color:gc(0.04)},ticks:{color:gc(0.4),font:{size:11}}}}}
+  });
+  new Chart(document.getElementById('chart-priority'), {
+    type:'pie',
+    data:{labels:['P1 Critical','P2 High','P3 Medium','P4 Low','P5 Info'],datasets:[{data:[4,14,38,30,14],backgroundColor:['#ef4444','#f97316','#f59e0b','#3b82f6','#6b7280'],borderWidth:0}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:gc(0.5),font:{family:'Geist',size:11},boxWidth:10,padding:8}}}}
+  });
+  const mo2 = ['Dec','Jan','Feb','Mar','Apr','May'];
+  new Chart(document.getElementById('chart-trend'), {
+    type:'line',
+    data:{labels:mo2,datasets:[
+      {label:'Infra',data:[180,165,155,140,135,128],borderColor:'#6366f1',tension:.4,borderWidth:2,pointRadius:3,fill:false},
+      {label:'Auth',data:[90,88,82,75,70,68],borderColor:'#3b82f6',tension:.4,borderWidth:2,pointRadius:3,fill:false},
+      {label:'Billing',data:[60,65,58,62,55,57],borderColor:'#f59e0b',tension:.4,borderWidth:2,pointRadius:3,fill:false},
+      {label:'Mobile',data:[40,45,50,48,52,55],borderColor:'#ec4899',tension:.4,borderWidth:2,pointRadius:3,fill:false},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{color:gc(0.5),font:{family:'Geist',size:11},boxWidth:10}}},scales:{x:{grid:{color:gc(0.04)},ticks:{color:gc(0.4),font:{size:11}}},y:{grid:{color:gc(0.04)},ticks:{color:gc(0.4),font:{size:11}}}}}
+  });
+}
+
+
+function initCSATCharts(){
+  if(chartsInitialized.csat) return;
+  chartsInitialized.csat = true;
+  const mo = ['Dec','Jan','Feb','Mar','Apr','May'];
+
+  new Chart(document.getElementById('chart-csat-trend'), {
+    type:'line',
+    data:{labels:mo,datasets:[
+      {label:'CSAT Score',data:[3.8,3.9,4.0,4.1,4.1,4.3],borderColor:'#f59e0b',backgroundColor:'rgba(245,158,11,.1)',fill:true,tension:.4,borderWidth:2,pointRadius:3,pointBackgroundColor:'#f59e0b'},
+      {label:'Satisfaction %',data:[72,74,78,82,84,87],borderColor:'#10b981',backgroundColor:'rgba(16,185,129,.06)',fill:true,tension:.4,borderWidth:2,pointRadius:3,pointBackgroundColor:'#10b981',yAxisID:'y2'}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index'},plugins:{legend:{position:'top',labels:{color:gc(0.5),font:{family:'Geist',size:11},boxWidth:10}}},scales:{x:{grid:{color:gc(0.04)},ticks:{color:gc(0.4),font:{size:11}}},y:{grid:{color:gc(0.04)},ticks:{color:gc(0.4),font:{size:11}},min:3,max:5},y2:{position:'right',grid:{display:false},ticks:{color:gc(0.4),font:{size:11}}}}}
+  });
+
+  new Chart(document.getElementById('chart-csat-teams'), {
+    type:'bar',
+    data:{labels:['Infra','Security','Platform','Support L1','Payments','Billing'],datasets:[{label:'Avg CSAT',data:[4.9,4.8,4.5,3.8,3.6,3.1],backgroundColor:['#10b981','#10b981','#3b82f6','#f59e0b','#f59e0b','#ef4444'],borderRadius:5,borderSkipped:false}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:gc(0.04)},ticks:{color:gc(0.4),font:{size:11}}},y:{grid:{color:gc(0.04)},ticks:{color:gc(0.4),font:{size:11}},min:0,max:5}}}
+  });
+
+  new Chart(document.getElementById('chart-csat-restime'), {
+    type:'line',
+    data:{labels:mo,datasets:[{label:'Avg Res. Time (h)',data:[6.8,6.2,5.7,5.1,4.6,4.2],borderColor:'#6366f1',backgroundColor:'rgba(99,102,241,.1)',fill:true,tension:.4,borderWidth:2,pointRadius:3}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:gc(0.04)},ticks:{color:gc(0.4),font:{size:10}}},y:{grid:{color:gc(0.04)},ticks:{color:gc(0.4),font:{size:10}}}}}
+  });
+
+  new Chart(document.getElementById('chart-csat-reopen'), {
+    type:'bar',
+    data:{labels:mo,datasets:[{label:'Reopened Tickets',data:[62,58,54,51,49,47],backgroundColor:'rgba(239,68,68,.6)',borderRadius:4,borderSkipped:false}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:gc(0.04)},ticks:{color:gc(0.4),font:{size:10}}},y:{grid:{color:gc(0.04)},ticks:{color:gc(0.4),font:{size:10}}}}}
+  });
+
+  new Chart(document.getElementById('chart-csat-vol-sat'), {
+    type:'scatter',
+    data:{datasets:[{label:'Teams',data:[{x:247,y:4.9},{x:183,y:4.5},{x:312,y:3.8},{x:142,y:3.6},{x:94,y:3.1},{x:131,y:4.8}],backgroundColor:['#10b981','#3b82f6','#f59e0b','#f59e0b','#ef4444','#10b981'],pointRadius:8,pointHoverRadius:10}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{title:{display:true,text:'Ticket Volume',color:gc(0.4),font:{size:10}},grid:{color:gc(0.04)},ticks:{color:gc(0.4),font:{size:10}}},y:{title:{display:true,text:'CSAT Score',color:gc(0.4),font:{size:10}},grid:{color:gc(0.04)},ticks:{color:gc(0.4),font:{size:10}},min:2,max:5}}}
+  });
+}
+
+// ─── Init ───
+window.addEventListener('DOMContentLoaded', () => {
+  lucide.createIcons();
+  initDashCharts();
+});
+</script>
+</body>
+</html>
