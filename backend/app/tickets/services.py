@@ -1,0 +1,747 @@
+import datetime
+from typing import List, Optional
+from sqlalchemy.orm import Session
+
+from sqlalchemy import func as sql_func
+from app.models import Attachment, Ticket, TicketRelationship, User
+from app.models.models import (
+    Category, Department, Notification, Subcategory, Team, TeamMember, TicketHistory,
+)
+from app.services.semantic_duplicate_service import run_semantic_duplicate_resolution
+
+
+def _enrich_with_relationship(db: Session, ticket: Ticket) -> Ticket:
+    """Attach parent relationship fields to a Ticket ORM instance."""
+    rel = (
+        db.query(TicketRelationship)
+        .filter(TicketRelationship.child_ticket_id == ticket.id)
+        .first()
+    )
+    if rel:
+        parent = db.query(Ticket).filter(Ticket.id == rel.parent_ticket_id).first()
+        ticket.parent_ticket_id = rel.parent_ticket_id
+        ticket.parent_ticket_no = parent.ticket_no if parent else None
+        ticket.relationship_type = rel.relation_type
+    else:
+        ticket.parent_ticket_id = None
+        ticket.parent_ticket_no = None
+        ticket.relationship_type = None
+    return ticket
+
+
+def _enrich_list_with_relationships(db: Session, tickets: List[Ticket]) -> List[Ticket]:
+    """Batch-enrich a list of Ticket ORM instances with parent relationship data."""
+    if not tickets:
+        return tickets
+
+    ticket_ids = [t.id for t in tickets]
+    rels = (
+        db.query(TicketRelationship)
+        .filter(TicketRelationship.child_ticket_id.in_(ticket_ids))
+        .all()
+    )
+    rel_map = {r.child_ticket_id: r for r in rels}
+
+    parent_ids = [r.parent_ticket_id for r in rels]
+    parent_map: dict = {}
+    if parent_ids:
+        parent_map = {
+            t.id: t
+            for t in db.query(Ticket).filter(Ticket.id.in_(parent_ids)).all()
+        }
+
+    for ticket in tickets:
+        rel = rel_map.get(ticket.id)
+        if rel:
+            parent = parent_map.get(rel.parent_ticket_id)
+            ticket.parent_ticket_id = rel.parent_ticket_id
+            ticket.parent_ticket_no = parent.ticket_no if parent else None
+            ticket.relationship_type = rel.relation_type
+        else:
+            ticket.parent_ticket_id = None
+            ticket.parent_ticket_no = None
+            ticket.relationship_type = None
+
+    return tickets
+
+
+def get_ticket_relationships(db: Session, ticket_id: str):
+    """Return all TicketRelationship rows where the ticket is parent or child."""
+    as_child = (
+        db.query(TicketRelationship)
+        .filter(TicketRelationship.child_ticket_id == ticket_id)
+        .all()
+    )
+    as_parent = (
+        db.query(TicketRelationship)
+        .filter(TicketRelationship.parent_ticket_id == ticket_id)
+        .all()
+    )
+
+    results = []
+    for rel in as_child:
+        parent = db.query(Ticket).filter(Ticket.id == rel.parent_ticket_id).first()
+        rel.parent_ticket_no = parent.ticket_no if parent else None
+        rel.relationship_id = rel.id
+        results.append(rel)
+    for rel in as_parent:
+        rel.parent_ticket_no = None  # this ticket IS the parent
+        rel.relationship_id = rel.id
+        results.append(rel)
+
+    return results
+
+
+def generate_ticket_number(db: Session) -> str:
+    current_year = datetime.datetime.utcnow().year
+    prefix = f"INC-{current_year}-"
+    last_ticket = (
+        db.query(Ticket)
+        .filter(Ticket.ticket_no.like(f"{prefix}%"))
+        .order_by(Ticket.ticket_no.desc())
+        .first()
+    )
+    if last_ticket and last_ticket.ticket_no:
+        try:
+            last_seq = int(last_ticket.ticket_no.rsplit("-", 1)[-1])
+            next_seq = last_seq + 1
+        except ValueError:
+            next_seq = 1
+    else:
+        next_seq = 1
+
+    return f"{prefix}{next_seq:06d}"
+
+
+def create_attachments(
+    db: Session,
+    ticket: Ticket,
+    attachments: List[dict],
+    uploaded_by: Optional[str] = None,
+) -> None:
+    for attachment_payload in attachments:
+        attachment = Attachment(
+            ticket_id=ticket.id,
+            file_name=attachment_payload.get("file_name"),
+            file_type=attachment_payload.get("file_type"),
+            file_size=attachment_payload.get("file_size"),
+            storage_path=attachment_payload.get("storage_path") or attachment_payload.get("file_name") or "",
+            uploaded_by=uploaded_by,
+        )
+        db.add(attachment)
+    db.commit()
+
+
+def create_ticket(
+    db: Session,
+    user: User,
+    subject: str,
+    description: str,
+    category_id: Optional[str] = None,
+    subcategory_id: Optional[str] = None,
+    priority: Optional[str] = None,
+    source: Optional[str] = None,
+    major_incident_flag: bool = False,
+    emergency_override: bool = False,
+    attachments: Optional[List[dict]] = None,
+) -> Ticket:
+    ticket_no = generate_ticket_number(db)
+    ticket = Ticket(
+        ticket_no=ticket_no,
+        organization_id=user.organization_id,
+        department_id=user.department_id,
+        created_by=user.user_id,
+        category_id=category_id,
+        subcategory_id=subcategory_id,
+        subject=subject,
+        description=description,
+        priority=priority or "P3",
+        source=source or "PORTAL",
+        major_incident_flag=major_incident_flag,
+        emergency_override=emergency_override,
+        status="OPEN",
+    )
+    db.add(ticket)
+    db.commit()
+    db.refresh(ticket)
+
+    if attachments:
+        create_attachments(db=db, ticket=ticket, attachments=attachments, uploaded_by=str(user.user_id))
+        db.refresh(ticket)
+
+    # Run semantic duplicate resolution engine
+    try:
+        attachment_text = None
+        if attachments:
+            attachment_text = " ".join([
+                f"{a.get('file_name', '')} {a.get('file_type', '')}"
+                for a in attachments if a
+            ])
+        run_semantic_duplicate_resolution(db=db, ticket=ticket, user=user, attachment_text=attachment_text)
+    except Exception as e:
+        print(f"[ERROR] Duplicate engine failed: {e}")
+        # Duplicate engine must not break ticket creation flow
+        pass
+
+    db.refresh(ticket)
+    return ticket
+
+
+def _enrich_ticket_names(db: Session, ticket: Ticket) -> None:
+    """Resolve and attach display-name attributes to a Ticket ORM instance."""
+    if ticket.category_id:
+        cat = db.query(Category).filter(Category.id == ticket.category_id).first()
+        ticket.category_name = cat.category_name if cat else None
+    else:
+        ticket.category_name = None
+
+    if ticket.subcategory_id:
+        sub = db.query(Subcategory).filter(Subcategory.id == ticket.subcategory_id).first()
+        ticket.subcategory_name = sub.subcategory_name if sub else None
+    else:
+        ticket.subcategory_name = None
+
+    team = None
+    if ticket.assigned_team_id:
+        team = db.query(Team).filter(Team.id == ticket.assigned_team_id).first()
+        ticket.assigned_team_name = team.team_name if team else None
+    else:
+        ticket.assigned_team_name = None
+
+    if ticket.department_id:
+        dept = db.query(Department).filter(Department.id == ticket.department_id).first()
+        ticket.department_name = dept.department_name if dept else None
+    elif team and team.department_id:
+        dept = db.query(Department).filter(Department.id == team.department_id).first()
+        ticket.department_name = dept.department_name if dept else None
+    else:
+        ticket.department_name = None
+
+
+def get_ticket_by_id(db: Session, ticket_id: str) -> Optional[Ticket]:
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if ticket:
+        _enrich_with_relationship(db, ticket)
+        _enrich_ticket_names(db, ticket)
+    return ticket
+
+
+def list_tickets(
+    db: Session,
+    current_user: User,
+    ticket_no: Optional[str] = None,
+    subject: Optional[str] = None,
+    created_by: Optional[str] = None,
+    department_id: Optional[str] = None,
+    assigned_team_id: Optional[str] = None,
+    status: Optional[str] = None,
+    priority: Optional[str] = None,
+    category_id: Optional[str] = None,
+    scope: Optional[str] = None,
+    from_date: Optional[datetime.date] = None,
+    to_date: Optional[datetime.date] = None,
+    skip: int = 0,
+    limit: int = 100,
+):
+    query = db.query(Ticket)
+
+    if current_user.role.upper() == "ADMIN":
+        pass
+    elif current_user.role.upper() == "TEAM":
+        if not department_id:
+            query = query.filter(Ticket.assigned_team_id.isnot(None))
+    else:
+        query = query.filter(Ticket.created_by == current_user.user_id)
+
+    if ticket_no:
+        query = query.filter(Ticket.ticket_no == ticket_no)
+    if subject:
+        query = query.filter(Ticket.subject.ilike(f"%{subject}%"))
+    if created_by:
+        query = query.filter(Ticket.created_by == created_by)
+    if department_id:
+        # Filter by department: match tickets whose assigned team belongs to this department
+        # OR tickets directly stamped with this department_id
+        dept_team_ids = [
+            str(t.id)
+            for t in db.query(Team).filter(Team.department_id == department_id).all()
+        ]
+        if dept_team_ids:
+            query = query.filter(
+                (Ticket.department_id == department_id) |
+                Ticket.assigned_team_id.in_(dept_team_ids)
+            )
+        else:
+            query = query.filter(Ticket.department_id == department_id)
+    if assigned_team_id:
+        query = query.filter(Ticket.assigned_team_id == assigned_team_id)
+    if status:
+        query = query.filter(Ticket.status == status)
+    if priority:
+        query = query.filter(Ticket.priority == priority)
+    if category_id:
+        query = query.filter(Ticket.category_id == category_id)
+    if scope:
+        query = query.filter(Ticket.scope == scope)
+    if from_date:
+        query = query.filter(Ticket.created_at >= from_date)
+    if to_date:
+        query = query.filter(Ticket.created_at <= to_date)
+
+    tickets = query.offset(skip).limit(limit).all()
+    _enrich_list_with_relationships(db, tickets)
+    _enrich_list_with_names(db, tickets)
+    return tickets
+
+
+def _enrich_list_with_names(db: Session, tickets: List[Ticket]) -> None:
+    """Batch-resolve category / subcategory / team / department display names."""
+    if not tickets:
+        return
+
+    cat_ids    = list({str(t.category_id)    for t in tickets if t.category_id})
+    sub_ids    = list({str(t.subcategory_id) for t in tickets if t.subcategory_id})
+    team_ids   = list({str(t.assigned_team_id) for t in tickets if t.assigned_team_id})
+    dept_ids   = list({str(t.department_id)  for t in tickets if t.department_id})
+
+    cat_map  = {str(c.id): c.category_name    for c in db.query(Category).filter(Category.id.in_(cat_ids)).all()} if cat_ids else {}
+    sub_map  = {str(s.id): s.subcategory_name for s in db.query(Subcategory).filter(Subcategory.id.in_(sub_ids)).all()} if sub_ids else {}
+    team_objs = db.query(Team).filter(Team.id.in_(team_ids)).all() if team_ids else []
+    team_map  = {str(t.id): t.team_name for t in team_objs}
+    # team → its department_id, used as fallback when ticket.department_id is null
+    team_dept_map = {str(t.id): str(t.department_id) for t in team_objs if t.department_id}
+
+    all_dept_ids = set(dept_ids) | set(team_dept_map.values())
+    dept_map = {str(d.id): d.department_name for d in db.query(Department).filter(Department.id.in_(all_dept_ids)).all()} if all_dept_ids else {}
+
+    for ticket in tickets:
+        ticket.category_name      = cat_map.get(str(ticket.category_id))    if ticket.category_id    else None
+        ticket.subcategory_name   = sub_map.get(str(ticket.subcategory_id)) if ticket.subcategory_id else None
+        ticket.assigned_team_name = team_map.get(str(ticket.assigned_team_id)) if ticket.assigned_team_id else None
+        if ticket.department_id:
+            ticket.department_name = dept_map.get(str(ticket.department_id))
+        elif ticket.assigned_team_id:
+            fallback_dept_id = team_dept_map.get(str(ticket.assigned_team_id))
+            ticket.department_name = dept_map.get(fallback_dept_id) if fallback_dept_id else None
+        else:
+            ticket.department_name = None
+
+
+def update_ticket(
+    db: Session,
+    ticket: Ticket,
+    subject: Optional[str] = None,
+    description: Optional[str] = None,
+    category_id: Optional[str] = None,
+    subcategory_id: Optional[str] = None,
+    priority: Optional[str] = None,
+    impact: Optional[str] = None,
+    urgency: Optional[str] = None,
+    scope: Optional[str] = None,
+    major_incident_flag: Optional[bool] = None,
+    emergency_override: Optional[bool] = None,
+) -> Ticket:
+    if subject is not None:
+        ticket.subject = subject
+    if description is not None:
+        ticket.description = description
+    if category_id is not None:
+        ticket.category_id = category_id
+    if subcategory_id is not None:
+        ticket.subcategory_id = subcategory_id
+    if priority is not None:
+        ticket.priority = priority
+    if impact is not None:
+        ticket.impact = impact
+    if urgency is not None:
+        ticket.urgency = urgency
+    if scope is not None:
+        ticket.scope = scope
+    if major_incident_flag is not None:
+        ticket.major_incident_flag = major_incident_flag
+    if emergency_override is not None:
+        ticket.emergency_override = emergency_override
+
+    db.add(ticket)
+    db.commit()
+    db.refresh(ticket)
+    return ticket
+
+
+def update_ticket_status(db: Session, ticket: Ticket, status: str) -> Ticket:
+    status = status.upper()
+    valid_statuses = {"OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED", "REOPENED"}
+    if status not in valid_statuses:
+        raise ValueError(f"Invalid status: {status}")
+
+    ticket.status = status
+    ticket.closed_at = datetime.datetime.utcnow() if status == "CLOSED" else None
+    db.add(ticket)
+    db.commit()
+    db.refresh(ticket)
+    return ticket
+
+
+def assign_ticket(
+    db: Session,
+    ticket: Ticket,
+    assigned_team_id: Optional[str] = None,
+    assigned_agent_id: Optional[str] = None,
+) -> Ticket:
+    if assigned_team_id is None and assigned_agent_id is None:
+        raise ValueError("assigned_team_id or assigned_agent_id is required")
+
+    ticket.assigned_team_id = assigned_team_id
+    ticket.assigned_agent_id = assigned_agent_id
+    db.add(ticket)
+    db.commit()
+    db.refresh(ticket)
+
+    return ticket
+
+
+# ── Timeline ───────────────────────────────────────────────────────────────────
+
+def get_ticket_timeline(db: Session, ticket_id: str) -> List[dict]:
+    """Return TicketHistory rows for a ticket as timeline events, newest last."""
+    rows = (
+        db.query(TicketHistory)
+        .filter(TicketHistory.ticket_id == ticket_id)
+        .order_by(TicketHistory.id)
+        .all()
+    )
+    _FIELD_LABEL = {
+        "category_id":     "Category assigned",
+        "subcategory_id":  "Subcategory assigned",
+        "priority":        "Priority assigned",
+        "impact":          "Impact assessed",
+        "urgency":         "Urgency assessed",
+        "assigned_team_id": "Team assigned",
+        "status":          "Status changed",
+    }
+    return [
+        {
+            "id": str(row.id),
+            "event": _FIELD_LABEL.get(row.field_changed, row.field_changed),
+            "value": row.new_value,
+            "old_value": row.old_value,
+            "changed_by": "AI Agent" if row.changed_by is None else str(row.changed_by),
+        }
+        for row in rows
+    ]
+
+
+# ── Dashboard stats ────────────────────────────────────────────────────────────
+
+def get_admin_dashboard_stats(db: Session) -> dict:
+    """Aggregate ticket counts by status, priority, and per-team workload."""
+    all_tickets = db.query(Ticket).all()
+
+    status_counts: dict = {}
+    priority_counts: dict = {}
+    team_counts: dict = {}
+
+    for t in all_tickets:
+        status_counts[t.status] = status_counts.get(t.status, 0) + 1
+        priority_counts[t.priority] = priority_counts.get(t.priority, 0) + 1
+        if t.assigned_team_id:
+            key = str(t.assigned_team_id)
+            team_counts[key] = team_counts.get(key, 0) + 1
+
+    # Resolve team names
+    team_name_map = {}
+    if team_counts:
+        teams = db.query(Team).filter(Team.id.in_(list(team_counts.keys()))).all()
+        team_name_map = {str(t.id): t.team_name for t in teams}
+
+    team_workload = [
+        {"team_id": tid, "team_name": team_name_map.get(tid, tid), "open_tickets": cnt}
+        for tid, cnt in sorted(team_counts.items(), key=lambda x: -x[1])
+    ]
+
+    open_count      = status_counts.get("OPEN", 0)
+    assigned_count  = status_counts.get("ASSIGNED", 0)
+    pending_count   = status_counts.get("PENDING_ADMIN_REVIEW", 0)
+    resolved_count  = status_counts.get("RESOLVED", 0) + status_counts.get("CLOSED", 0)
+    in_progress     = status_counts.get("IN_PROGRESS", 0)
+
+    return {
+        "total_tickets": len(all_tickets),
+        "open": open_count,
+        "assigned": assigned_count,
+        "in_progress": in_progress,
+        "pending_review": pending_count,
+        "resolved": resolved_count,
+        "status_breakdown": status_counts,
+        "priority_breakdown": priority_counts,
+        "team_workload": team_workload,
+    }
+
+
+def get_ticket_messages(db: Session, ticket_id: str) -> List[dict]:
+    from app.models.models import TicketMessage, User
+    rows = (
+        db.query(TicketMessage, User.full_name)
+        .outerjoin(User, TicketMessage.sender_id == User.user_id)
+        .filter(TicketMessage.ticket_id == ticket_id)
+        .filter(TicketMessage.message_type == "CHAT")
+        .order_by(TicketMessage.created_at.asc())
+        .all()
+    )
+    return [
+        {
+            "id": str(m.id),
+            "ticket_id": str(m.ticket_id),
+            "sender_id": str(m.sender_id) if m.sender_id else None,
+            "sender_name": full_name or "Unknown",
+            "sender_type": m.sender_type,
+            "message_body": m.message_body,
+            "created_at": m.created_at,
+        }
+        for m, full_name in rows
+    ]
+
+
+def create_ticket_message(db: Session, ticket_id: str, sender, body: str) -> dict:
+    from app.models.models import TicketMessage, User
+    msg = TicketMessage(
+        ticket_id=ticket_id,
+        sender_id=sender.user_id,
+        sender_type=sender.role.upper(),
+        message_type="CHAT",
+        message_body=body.strip(),
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    sender_name = getattr(sender, "full_name", None) or str(sender.user_id)
+    return {
+        "id": str(msg.id),
+        "ticket_id": str(msg.ticket_id),
+        "sender_id": str(msg.sender_id),
+        "sender_name": sender_name,
+        "sender_type": msg.sender_type,
+        "message_body": msg.message_body,
+        "created_at": msg.created_at,
+    }
+
+
+def get_notifications_for_user(db: Session, user_id: str, limit: int = 20) -> List[dict]:
+    rows = (
+        db.query(Notification)
+        .filter(Notification.user_id == user_id)
+        .order_by(Notification.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id": str(r.id),
+            "type": r.notification_type,
+            "title": r.title,
+            "message": r.message,
+            "is_read": r.is_read,
+        }
+        for r in rows
+    ]
+
+
+def mark_notifications_read(db: Session, user_id: str) -> None:
+    db.query(Notification).filter(
+        Notification.user_id == user_id,
+        Notification.is_read == False,
+    ).update({"is_read": True})
+    db.commit()
+
+
+# ── Department dashboard stats ─────────────────────────────────────────────────
+
+def get_department_dashboard_stats(db: Session, user) -> dict:
+    now = datetime.datetime.utcnow()
+    sla_hours = {"P1": 4, "P2": 8, "P3": 24, "P4": 72}
+
+    # ── Resolve which teams belong to this user's department ──────────────────
+    dept_name = "Department"
+    team_ids: list = []
+
+    if hasattr(user, "role") and user.role.upper() == "ADMIN":
+        all_teams = db.query(Team).all()
+        team_ids = [str(t.id) for t in all_teams]
+        dept_name = "All Departments"
+    else:
+        member = db.query(TeamMember).filter(TeamMember.user_id == user.user_id).first()
+        if member:
+            team = db.query(Team).filter(Team.id == member.team_id).first()
+            if team and team.department_id:
+                dept = db.query(Department).filter(Department.id == team.department_id).first()
+                dept_name = dept.department_name if dept else "Department"
+                dept_teams = db.query(Team).filter(Team.department_id == team.department_id).all()
+                team_ids = [str(t.id) for t in dept_teams]
+            elif team:
+                team_ids = [str(team.id)]
+
+    # ── Query tickets ─────────────────────────────────────────────────────────
+    q = db.query(Ticket)
+    if team_ids:
+        q = q.filter(Ticket.assigned_team_id.in_(team_ids))
+    else:
+        q = q.filter(False)
+    all_tickets = q.all()
+
+    # ── Aggregate ─────────────────────────────────────────────────────────────
+    week_start  = now - datetime.timedelta(days=7)
+    week_start2 = now - datetime.timedelta(days=14)
+
+    status_counts: dict = {}
+    priority_counts: dict = {}
+    category_counts: dict = {}
+    team_stats: dict = {}
+    escalated = sla_breached = sla_at_risk = incidents = svc_requests = 0
+    this_week = last_week = 0
+
+    for t in all_tickets:
+        s = t.status or "OPEN"
+        status_counts[s] = status_counts.get(s, 0) + 1
+        if t.priority:
+            priority_counts[t.priority] = priority_counts.get(t.priority, 0) + 1
+        if t.category_id:
+            cid = str(t.category_id)
+            category_counts[cid] = category_counts.get(cid, 0) + 1
+
+        active = s in ("OPEN", "ASSIGNED", "IN_PROGRESS")
+        if t.priority == "P1" and active:
+            escalated += 1
+        if active and t.created_at:
+            h = sla_hours.get(t.priority, 72)
+            deadline = t.created_at + datetime.timedelta(hours=h)
+            if deadline < now:
+                sla_breached += 1
+            elif deadline < now + datetime.timedelta(hours=h * 0.2):
+                sla_at_risk += 1
+
+        if t.major_incident_flag:
+            incidents += 1
+        else:
+            svc_requests += 1
+
+        if t.created_at:
+            if t.created_at >= week_start:
+                this_week += 1
+            elif t.created_at >= week_start2:
+                last_week += 1
+
+        if t.assigned_team_id:
+            tid = str(t.assigned_team_id)
+            if tid not in team_stats:
+                team_stats[tid] = {
+                    "open": 0, "in_progress": 0, "pending": 0,
+                    "resolved": 0, "escalated": 0, "sla_breached": 0, "total": 0,
+                }
+            ts = team_stats[tid]
+            ts["total"] += 1
+            if s in ("OPEN", "ASSIGNED"):
+                ts["open"] += 1
+            elif s == "IN_PROGRESS":
+                ts["in_progress"] += 1
+            elif s == "PENDING_ADMIN_REVIEW":
+                ts["pending"] += 1
+            elif s in ("RESOLVED", "CLOSED"):
+                ts["resolved"] += 1
+            if t.priority == "P1" and active:
+                ts["escalated"] += 1
+            if active and t.created_at:
+                h = sla_hours.get(t.priority, 72)
+                if t.created_at + datetime.timedelta(hours=h) < now:
+                    ts["sla_breached"] += 1
+
+    # ── Resolve display names ─────────────────────────────────────────────────
+    if team_stats:
+        teams = db.query(Team).filter(Team.id.in_(list(team_stats.keys()))).all()
+        team_name_map = {str(t.id): t.team_name for t in teams}
+    else:
+        team_name_map = {}
+
+    team_breakdown = sorted(
+        [{"team_id": tid, "team_name": team_name_map.get(tid, tid), **stats}
+         for tid, stats in team_stats.items()],
+        key=lambda x: -x["total"],
+    )
+
+    if category_counts:
+        cats = db.query(Category).filter(Category.id.in_(list(category_counts.keys()))).all()
+        cat_name_map = {str(c.id): c.category_name for c in cats}
+    else:
+        cat_name_map = {}
+
+    category_breakdown = sorted(
+        [{"category": cat_name_map.get(cid, cid), "count": cnt}
+         for cid, cnt in category_counts.items()],
+        key=lambda x: -x["count"],
+    )[:10]
+
+    # ── Recent activity ───────────────────────────────────────────────────────
+    if team_ids:
+        hist_rows = (
+            db.query(TicketHistory, Ticket)
+            .join(Ticket, TicketHistory.ticket_id == Ticket.id)
+            .filter(Ticket.assigned_team_id.in_(team_ids))
+            .order_by(TicketHistory.id.desc())
+            .limit(15)
+            .all()
+        )
+    else:
+        hist_rows = []
+
+    _FIELD_LABEL = {
+        "category_id":    "Category assigned",
+        "subcategory_id": "Subcategory assigned",
+        "priority":       "Priority set",
+        "assigned_team_id": "Assigned to team",
+        "status":         "Status changed",
+    }
+    recent_activity = [
+        {
+            "event":     _FIELD_LABEL.get(h.field_changed, h.field_changed),
+            "value":     h.new_value,
+            "ticket_id": str(h.ticket_id),
+            "ticket_no": t.ticket_no,
+        }
+        for h, t in hist_rows
+    ]
+
+    # ── Final aggregates ──────────────────────────────────────────────────────
+    open_n   = status_counts.get("OPEN", 0) + status_counts.get("ASSIGNED", 0)
+    in_prog  = status_counts.get("IN_PROGRESS", 0)
+    pending  = status_counts.get("PENDING_ADMIN_REVIEW", 0)
+    resolved = status_counts.get("RESOLVED", 0) + status_counts.get("CLOSED", 0)
+    active_n = open_n + in_prog
+    sla_compliance = round((1 - sla_breached / max(active_n, 1)) * 100, 1)
+
+    def pct(curr, prev):
+        if prev == 0:
+            return 0
+        return round((curr - prev) / prev * 100, 1)
+
+    return {
+        "dept_name":        dept_name,
+        "total_tickets":    len(all_tickets),
+        "open":             open_n,
+        "in_progress":      in_prog,
+        "pending":          pending,
+        "resolved":         resolved,
+        "escalated":        escalated,
+        "sla_breached":     sla_breached,
+        "sla_at_risk":      sla_at_risk,
+        "incidents":        incidents,
+        "service_requests": svc_requests,
+        "sla_compliance":   sla_compliance,
+        "active_slas":      active_n,
+        "status_breakdown":   status_counts,
+        "priority_breakdown": priority_counts,
+        "category_breakdown": category_breakdown,
+        "team_breakdown":     team_breakdown,
+        "this_week":          this_week,
+        "last_week":          last_week,
+        "trend_week_pct":     pct(this_week, last_week),
+        "recent_activity":    recent_activity,
+    }

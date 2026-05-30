@@ -5,6 +5,11 @@ psycopg2-binary
 python-dotenv
 python-jose[cryptography]
 passlib[bcrypt]
-bcrypt
+bcrypt==4.0.1
 python-multipart
 pydantic[email]
+sentence-transformers
+pgvector
+requests
+numpy
+anthropic

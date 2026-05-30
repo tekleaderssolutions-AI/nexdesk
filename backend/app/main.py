@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.health import router as health_router
 from app.auth.routes import router as auth_router
 from app.admin.routes import router as admin_router
+from app.tickets.routes import router as ticket_router
 from app.db.database import engine
 from app.db.init_db import init_db
 
@@ -19,6 +20,7 @@ app = FastAPI(title="NexDesk Backend", version="0.1.0")
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(ticket_router)
 
 # Allow frontend dev servers to access the API during development
 app.add_middleware(
@@ -48,4 +50,8 @@ def on_startup() -> None:
         raise
 
     init_db()
+
+    from app.services.embedding_service import EmbeddingService
+    EmbeddingService.warmup()
+
     logging.info("Backend started successfully")

@@ -1,0 +1,51 @@
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+myenv/
+ENV/
+
+# Node / frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+.npm/
+*.log
+npm-debug.log*
+
+# Database & migration artifacts
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Alembic generated (keep versions, ignore auto-generated temp files)
+alembic/versions/*.pyc
+
+# Compiled bytecode (already in __pycache__ but explicit)
+*.pyc

@@ -1,11 +1,62 @@
 import logging
 from pathlib import Path
 
+from sqlalchemy import inspect, text
+from sqlalchemy.orm import sessionmaker
+
 from app.db.database import engine
 from app.models import Base
 
 
 SQL_SCHEMA_REFERENCE = Path(__file__).resolve().parents[2] / "db_schema.sql"
+
+
+def _format_server_default(default_value):
+    if default_value is None:
+        return None
+
+    if isinstance(default_value, str):
+        if not (default_value.startswith("'") or default_value.startswith('"')):
+            return f"'{default_value}'"
+        return default_value
+
+    return str(default_value)
+
+
+def ensure_table_columns(engine, inspector, table) -> None:
+    existing_columns = {col["name"] for col in inspector.get_columns(table.name)}
+    missing_columns = [col for col in table.columns if col.name not in existing_columns]
+    if not missing_columns:
+        return
+
+    with engine.begin() as connection:
+        for column in missing_columns:
+            column_type = column.type.compile(dialect=engine.dialect)
+            sql = f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {column_type}'
+            default_value = None
+            if column.server_default is not None:
+                default_value = _format_server_default(column.server_default.arg)
+            elif column.default is not None and column.default.arg is not None:
+                default_value = _format_server_default(column.default.arg)
+
+            if default_value is not None:
+                sql += f" DEFAULT {default_value}"
+            if not column.nullable and default_value is None:
+                # Do not add a strict NOT NULL column to an existing table without a default.
+                # Add it as nullable first so legacy data can remain valid.
+                sql += " NULL"
+
+            try:
+                connection.execute(text(sql))
+                logging.info("Added missing column '%s.%s'", table.name, column.name)
+            except Exception as exc:
+                logging.warning(
+                    "Failed to add missing column '%s.%s': %s. SQL: %s",
+                    table.name,
+                    column.name,
+                    exc,
+                    sql,
+                )
 
 
 def init_db() -> None:
@@ -24,8 +75,6 @@ def init_db() -> None:
     # - Inspect existing tables and columns
     # - Create only tables that don't exist AND whose foreign-key targets
     #   already exist with the referenced columns
-    from sqlalchemy import inspect
-
     inspector = inspect(engine)
     existing_tables = set()
     try:
@@ -37,7 +86,11 @@ def init_db() -> None:
     for table in Base.metadata.sorted_tables:
         tname = table.name
         if tname in existing_tables:
-            logging.info("Table '%s' already exists — skipping", tname)
+            logging.info("Table '%s' already exists — checking columns", tname)
+            try:
+                ensure_table_columns(engine=engine, inspector=inspector, table=table)
+            except Exception as e:
+                logging.error("Failed to reconcile columns for table '%s': %s", tname, e)
             continue
 
         # Validate that all foreign key references exist in current DB schema
@@ -82,3 +135,19 @@ def init_db() -> None:
         raise RuntimeError("Database initialization failed; see logs for details")
 
     logging.info("Tables initialized (safe creation)")
+
+    # Initialize pgvector extension and migrate ticket_embeddings
+    try:
+        from app.db.pgvector_migration import init_pgvector, migrate_ticket_embeddings, migrate_kb_embeddings
+        Session = sessionmaker(bind=engine)
+        db_session = Session()
+
+        init_pgvector(db_session)
+        migrate_ticket_embeddings(db_session)
+        migrate_kb_embeddings(db_session)
+
+        db_session.close()
+        logging.info("pgvector initialized and migrations applied")
+    except Exception as e:
+        logging.warning(f"pgvector initialization error (may already exist): {e}")
+
