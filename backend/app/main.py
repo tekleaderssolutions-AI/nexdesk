@@ -1,4 +1,6 @@
 import logging
+from dotenv import load_dotenv
+load_dotenv()  # loads OPENAI_API_KEY (and all other vars) from backend/.env
 
 from fastapi import FastAPI
 from sqlalchemy import text

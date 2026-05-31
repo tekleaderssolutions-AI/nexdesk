@@ -368,6 +368,10 @@ def run_semantic_duplicate_resolution(
         limit=10,
     )
 
+    # decision_made tracks whether a candidate-based decision was already committed.
+    # Initialized here so it is in scope even when candidates is empty.
+    decision_made = bool(not candidates)   # True when no candidates → already handled above
+
     if not candidates:
         print("[DUPLICATE_ENGINE] No similar tickets found")
         tag = PROCESS_TAGS["NO_SIMILAR_TICKETS"]
@@ -375,21 +379,21 @@ def run_semantic_duplicate_resolution(
         _commit_decision(db, ticket)
         _try_audit(db, _make_audit(tag, ticket.id,
             reasoning="No similar tickets discovered"))
-        return
+        # Fall through — classification must still run below
 
-    # --- Candidate summary (all results that passed threshold) ---
-    print(f"\n[DUPLICATE_ENGINE] ══ Candidates above threshold ({len(candidates)}) ══")
-    for _c, _s in candidates:
-        _same = str(_c.created_by) == str(ticket.created_by)
-        print(
-            f"  {_c.ticket_no:<12}  score={_s:.4f}  status={_c.status:<22}  "
-            f"created_by_id={_c.created_by}  is_same_user={_same}"
-        )
-    print()
+    else:
+        # --- Candidate summary ---
+        print(f"\n[DUPLICATE_ENGINE] ══ Candidates above threshold ({len(candidates)}) ══")
+        for _c, _s in candidates:
+            _same = str(_c.created_by) == str(ticket.created_by)
+            print(
+                f"  {_c.ticket_no:<12}  score={_s:.4f}  status={_c.status:<22}  "
+                f"created_by_id={_c.created_by}  is_same_user={_same}"
+            )
+        print()
 
-    # --- Decision workflow ---
+    # --- Decision workflow (only runs when candidates exist) ---
     now = datetime.datetime.utcnow()
-    decision_made = False
 
     for candidate, similarity_score in candidates:
         cstatus = (candidate.status or "").upper()
@@ -407,6 +411,10 @@ def run_semantic_duplicate_resolution(
             print("[DUPLICATE_ENGINE]   Decision=DUPLICATE_ATTACHED")
             tag = PROCESS_TAGS["DUPLICATE_ATTACHED"]
             ticket.process_tag = tag
+            ticket.is_duplicate = True
+            ticket.duplicate_of = candidate.id
+            ticket.duplicate_status = "DUPLICATE"
+            ticket.duplicate_reason = "SEMANTIC_MATCH"
 
             rel = TicketRelationship(
                 parent_ticket_id=candidate.id,
@@ -584,6 +592,15 @@ def run_semantic_duplicate_resolution(
             from app.services.classification_service import run_classification_pipeline
             print(f"[CLASSIFY] Auto-triggering for ticket {ticket.ticket_no} (tag={ticket.process_tag})")
             run_classification_pipeline(db, ticket)
-            print(f"[CLASSIFY] Done → status={ticket.status} priority={ticket.priority}")
+            db.refresh(ticket)
+            print(f"[CLASSIFY] Done → status={ticket.status} priority={ticket.priority} team={ticket.assigned_team_id}")
         except Exception as exc:
             print(f"[CLASSIFY] Auto-classification failed: {exc}")
+
+        # AI Suggestion — runs in a background thread after classification sets category/team
+        try:
+            from app.services.ai_suggestion_service import trigger_async
+            print(f"[AISuggestion] Queuing background generation for {ticket.ticket_no}")
+            trigger_async(str(ticket.id))
+        except Exception as exc:
+            print(f"[AISuggestion] Failed to queue: {exc}")

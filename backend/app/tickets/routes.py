@@ -9,7 +9,12 @@ from app.auth.dependencies import get_current_admin, get_current_team, get_curre
 from app.db.dependencies import get_db
 from app.models import Ticket
 from app.tickets import schemas, services
-from app.tickets.schemas import AISuggestionResponse, TicketRelationshipResponse, TicketResolutionResponse, ResolutionConfidenceResponse, TicketMessageCreate, TicketMessageResponse
+from app.tickets.schemas import (
+    AISuggestionResponse, TicketRelationshipResponse, TicketResolutionResponse,
+    ResolutionConfidenceResponse, TicketMessageCreate, TicketMessageResponse,
+    ActionEngineRequest, ActionEngineResponse, ActionConfirmRequest,
+    TeamAIActionRequest, AIResolutionDataResponse, ConversationCreate, ConversationResponse,
+)
 
 router = APIRouter(prefix="", tags=["Tickets"])
 
@@ -340,6 +345,7 @@ def get_ai_suggestion(
         suggested_steps=suggestion.suggested_steps_json or [],
         confidence=float(suggestion.confidence),
         recommended_escalation_team=suggestion.recommended_escalation_team,
+        resolution=suggestion.resolution,
         created_at=suggestion.created_at,
     )
 
@@ -406,6 +412,46 @@ def get_ticket_resolution(
     return resolution
 
 
+# ── AI Resolution: Accept / Reject ───────────────────────────────────────────
+
+@router.post("/tickets/{ticket_id}/accept-resolution", response_model=schemas.TicketResponse)
+def accept_resolution(
+    ticket_id: UUID,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ticket = services.get_ticket_by_id(db, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    if ticket.created_by != current_user.user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Only the ticket creator can accept this resolution")
+    try:
+        ticket = services.accept_ai_resolution(db, ticket, current_user)
+    except (ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return ticket
+
+
+@router.post("/tickets/{ticket_id}/reject-resolution", response_model=schemas.TicketResponse)
+def reject_resolution(
+    ticket_id: UUID,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ticket = services.get_ticket_by_id(db, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    if ticket.created_by != current_user.user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Only the ticket creator can reject this resolution")
+    try:
+        ticket = services.reject_ai_resolution(db, ticket, current_user)
+    except (ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return ticket
+
+
 # ── Ticket Messages (chat) ────────────────────────────────────────────────────
 
 @router.get("/tickets/{ticket_id}/messages", response_model=List[TicketMessageResponse])
@@ -435,6 +481,193 @@ def send_ticket_message(
     if not payload.message_body.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message body cannot be empty")
     return services.create_ticket_message(db, str(ticket_id), current_user, payload.message_body)
+
+
+# ── AI Action Engine ──────────────────────────────────────────────────────────
+
+@router.post("/tickets/{ticket_id}/discover-actions", response_model=ActionEngineResponse)
+def discover_actions(
+    ticket_id: UUID,
+    payload: ActionEngineRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Run the AI Action Engine pipeline for a ticket.
+    Discovers registered OpenAPI actions, selects the best one via LLM,
+    evaluates risk, and executes automatically for LOW-risk actions.
+    """
+    ticket = services.get_ticket_by_id(db, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    assert_ticket_visible(ticket, current_user)
+
+    from app.services.action_engine_service import run_action_engine
+    result = run_action_engine(
+        db=db,
+        ticket=ticket,
+        kb_confidence=payload.kb_confidence or 0.0,
+        kb_title=payload.kb_title or "",
+        kb_resolution=payload.kb_resolution or "",
+    )
+    return result
+
+
+@router.post("/tickets/{ticket_id}/confirm-action", response_model=schemas.TicketResponse)
+def confirm_action(
+    ticket_id: UUID,
+    payload: ActionConfirmRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """User confirms whether the automated action resolved their issue."""
+    ticket = services.get_ticket_by_id(db, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    if ticket.created_by != current_user.user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the ticket creator can confirm action results")
+    if ticket.status != "AI_ACTION_COMPLETED":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ticket is not awaiting action confirmation")
+
+    from app.services.action_engine_service import confirm_action as engine_confirm
+    ticket = engine_confirm(db, ticket, current_user, payload.resolved)
+    return ticket
+
+
+@router.get("/tickets/{ticket_id}/action-execution")
+def get_action_execution(
+    ticket_id: UUID,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the latest action execution record for a ticket."""
+    ticket = services.get_ticket_by_id(db, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    assert_ticket_visible(ticket, current_user)
+
+    from app.models.models import TicketActionExecution
+    exe = (
+        db.query(TicketActionExecution)
+        .filter(TicketActionExecution.ticket_id == ticket_id)
+        .order_by(TicketActionExecution.executed_at.desc())
+        .first()
+    )
+    if not exe:
+        return None
+    return {
+        "id": str(exe.id),
+        "operation_id": exe.operation_id,
+        "execution_status": exe.execution_status,
+        "action_summary": exe.action_summary,
+        "confidence": float(exe.confidence) if exe.confidence else None,
+        "risk_level": exe.risk_level,
+        "selection_reason": exe.selection_reason,
+        "risk_reason": exe.risk_reason,
+        "user_confirmed": exe.user_confirmed,
+        "executed_at": exe.executed_at.isoformat() if exe.executed_at else None,
+    }
+
+
+# ── Team AI Action (Approve / Edit / Reject) ─────────────────────────────────
+
+@router.post("/tickets/{ticket_id}/team-ai-action", response_model=schemas.TicketResponse)
+def team_ai_action(
+    ticket_id: UUID,
+    payload: TeamAIActionRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Team approves, edits, or rejects the AI suggested resolution."""
+    ticket = services.get_ticket_by_id(db, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+
+    role = current_user.role.upper()
+    if role not in ("TEAM", "ADMIN"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only team or admin can review AI suggestions")
+    if ticket.status != "AI_TEAM_REVIEW":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ticket is not awaiting AI team review")
+
+    action = (payload.action or "").upper()
+    if action not in ("APPROVE", "EDIT", "REJECT"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="action must be APPROVE, EDIT, or REJECT")
+    if action == "EDIT" and not (payload.edited_solution or "").strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="edited_solution is required when action=EDIT")
+
+    return services.team_ai_action(db, ticket, action, payload.edited_solution, current_user)
+
+
+@router.get("/tickets/{ticket_id}/ai-resolution", response_model=AIResolutionDataResponse)
+def get_ai_resolution(
+    ticket_id: UUID,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the AI resolution data for a ticket (solution text, confidence, approval info)."""
+    ticket = services.get_ticket_by_id(db, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    assert_ticket_visible(ticket, current_user)
+
+    priority = (ticket.priority or "P3").upper()
+    if ticket.resolution_type == "AI_AUTO_RESOLVE":
+        level = "L1_AUTO"
+    elif ticket.resolution_type == "AI_TEAM_REVIEW":
+        level = "L2_TEAM_REVIEW"
+    elif priority in ("P1", "P2"):
+        level = "L3_INTERNAL"
+    else:
+        level = "NONE"
+
+    return AIResolutionDataResponse(
+        ticket_id=str(ticket_id),
+        level=level,
+        original_ai_solution=ticket.original_ai_solution,
+        edited_team_solution=ticket.edited_team_solution,
+        approved_by=ticket.ai_solution_approved_by,
+        approved_at=ticket.ai_solution_approved_at,
+        resolution_type=ticket.resolution_type,
+        final_confidence=float(ticket.final_resolution_confidence) if ticket.final_resolution_confidence else None,
+        status=ticket.status,
+    )
+
+
+# ── Conversations (P1/P2 structured thread) ───────────────────────────────────
+
+@router.get("/tickets/{ticket_id}/conversations", response_model=List[ConversationResponse])
+def get_conversations(
+    ticket_id: UUID,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ticket = services.get_ticket_by_id(db, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    assert_ticket_visible(ticket, current_user)
+
+    role = current_user.role.upper()
+    include_internal = role in ("TEAM", "ADMIN")
+    return services.get_ticket_conversations(db, str(ticket_id), include_internal=include_internal)
+
+
+@router.post("/tickets/{ticket_id}/conversations", response_model=ConversationResponse,
+             status_code=status.HTTP_201_CREATED)
+def send_conversation_message(
+    ticket_id: UUID,
+    payload: ConversationCreate,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ticket = services.get_ticket_by_id(db, ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    assert_ticket_visible(ticket, current_user)
+    if not payload.message.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message cannot be empty")
+    return services.create_conversation_message(
+        db, str(ticket_id), current_user, payload.message, payload.attachment_url
+    )
 
 
 # ── Knowledge Base ─────────────────────────────────────────────────────────────

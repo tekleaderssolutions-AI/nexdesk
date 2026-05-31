@@ -1,6 +1,10 @@
 from app.db.base import Base
 from app.models.models import (
     AIFeedback,
+    ToolRegistration,
+    ToolCatalogOperation,
+    TicketActionExecution,
+    TicketConversation,
     Agent,
     AgentActivityLog,
     AssignmentRule,
@@ -34,6 +38,7 @@ from app.models.models import (
     TicketResolution,
     TicketSimilarityResult,
     TicketResolutionScore,
+    TicketTimeline,
     User,
     TicketRelationship,
     DuplicateDecisionAudit,
@@ -68,6 +73,7 @@ __all__ = [
     "DuplicateDecisionAudit",
     "TicketSimilarityResult",
     "TicketResolutionScore",
+    "TicketTimeline",
     "AIFeedback",
     "KnowledgeBase",
     "KBEmbedding",
@@ -78,4 +84,8 @@ __all__ = [
     "AgentActivityLog",
     "CSATFeedback",
     "AuditLog",
+    "ToolRegistration",
+    "ToolCatalogOperation",
+    "TicketActionExecution",
+    "TicketConversation",
 ]

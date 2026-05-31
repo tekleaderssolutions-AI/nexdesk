@@ -11,7 +11,6 @@ Future extensibility:
   - Swap _generate() to use RAG or a different model without touching routes.
 """
 import json
-import os
 import threading
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -114,51 +113,14 @@ def _extract_json(text: str) -> Optional[dict]:
     return None
 
 
-# ── Backend: Anthropic ─────────────────────────────────────────────────────────
+# ── Backend: OpenAI ────────────────────────────────────────────────────────────
 
-def _call_anthropic(prompt: str) -> Optional[dict]:
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        return None
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-        message = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=512,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = message.content[0].text if message.content else ""
-        print(f"[AISuggestion] Anthropic response: {raw[:200]}")
-        return _extract_json(raw)
-    except Exception as e:
-        print(f"[AISuggestion] Anthropic error: {e}")
-        return None
-
-
-# ── Backend: Ollama (fallback) ─────────────────────────────────────────────────
-
-def _call_ollama(prompt: str) -> Optional[dict]:
-    try:
-        import requests
-        r = requests.post(
-            "http://localhost:11434/api/generate",
-            json={
-                "model": "llama3.2:3b",
-                "prompt": prompt,
-                "stream": False,
-                "options": {"num_predict": 512, "temperature": 0.1, "top_p": 0.2},
-            },
-            timeout=60,
-        )
-        if r.status_code != 200:
-            return None
-        raw = r.json().get("response", "").strip()
-        print(f"[AISuggestion] Ollama response: {raw[:200]}")
-        return _extract_json(raw)
-    except Exception as e:
-        print(f"[AISuggestion] Ollama error: {e}")
-        return None
+def _call_openai(prompt: str) -> Optional[dict]:
+    from app.services import llm_client as _llm
+    result = _llm.call_json(prompt, max_tokens=512, tag="AISuggestion")
+    if result:
+        print(f"[AISuggestion] OpenAI response received")
+    return result
 
 
 # ── Validation ─────────────────────────────────────────────────────────────────
@@ -242,7 +204,7 @@ def _generate(ctx: AISuggestionContext) -> Optional[dict]:
         assigned_team=ctx.assigned_team,
         priority=ctx.priority,
     )
-    result = _call_anthropic(prompt) or _call_ollama(prompt)
+    result = _call_openai(prompt)
     if not result:
         print(f"[AISuggestion] No LLM response for ticket {ctx.ticket_id}")
         return None

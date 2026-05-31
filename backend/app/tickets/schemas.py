@@ -72,6 +72,7 @@ class AISuggestionResponse(BaseModel):
     suggested_steps: list
     confidence: float
     recommended_escalation_team: Optional[str] = None
+    resolution: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -133,6 +134,14 @@ class TicketResponse(BaseModel):
     subcategory_name: Optional[str] = None
     assigned_team_name: Optional[str] = None
     department_name: Optional[str] = None
+    # Lifecycle fields
+    assigned_department_id: Optional[UUID] = None
+    resolved_by: Optional[str] = None
+    resolved_at: Optional[datetime] = None
+    resolution_type: Optional[str] = None
+    final_resolution_confidence: Optional[float] = None
+    closed_by_user: bool = False
+    ai_resolution_rejected: bool = False
 
     class Config:
         from_attributes = True
@@ -164,15 +173,107 @@ class KBSimilarityMatchResponse(BaseModel):
     resolution: Optional[str] = None
 
 
+class CoverageDetail(BaseModel):
+    matched_terms: int
+    total_terms: int
+    coverage: float
+    sample_matched: Optional[List[str]] = None
+
+
+class LLMVerificationDetail(BaseModel):
+    resolution_type: str
+    confidence: float
+    reason: str
+
+
+class ComponentScores(BaseModel):
+    similarity: float
+    coverage: float
+    classification: float
+    kb_quality: float
+    llm_verification: float
+
+
 class ResolutionConfidenceResponse(BaseModel):
     ticket_id: str
     top_matches: List[KBSimilarityMatchResponse]
+    # Component scores
     similarity_score: float
     coverage_score: float
-    resolution_quality_score: float
     classification_confidence: float
+    resolution_quality_score: float
+    llm_verification_score: float
     final_resolution_confidence: float
+    # Decision + explainability
     decision: str
+    decision_reason: Optional[str] = None
+    matched_kb_article_id: Optional[str] = None
+    component_scores: Optional[ComponentScores] = None
+    coverage_detail: Optional[CoverageDetail] = None
+    llm_verification: Optional[LLMVerificationDetail] = None
+    # Config visibility
+    formula_weights: Optional[dict] = None
+    thresholds: Optional[dict] = None
+
+
+class ActionEngineRequest(BaseModel):
+    kb_confidence: Optional[float] = 0.0
+    kb_title: Optional[str] = ""
+    kb_resolution: Optional[str] = ""
+
+
+class ActionEngineResponse(BaseModel):
+    decision: str
+    action_taken: Optional[str] = None
+    action_summary: Optional[str] = None
+    execution_status: Optional[str] = None
+    confidence: float = 0.0
+    risk_level: Optional[str] = None
+    selection_reason: Optional[str] = None
+    risk_reason: Optional[str] = None
+    final_reason: Optional[str] = None
+    resolved_params: Optional[dict] = None
+
+
+class ActionConfirmRequest(BaseModel):
+    resolved: bool
+
+
+class TeamAIActionRequest(BaseModel):
+    action: str                            # APPROVE | EDIT | REJECT
+    edited_solution: Optional[str] = None  # required when action=EDIT
+
+
+class AIResolutionDataResponse(BaseModel):
+    ticket_id: str
+    level: str                             # L1_AUTO / L2_TEAM_REVIEW / L3_INTERNAL
+    original_ai_solution: Optional[str] = None
+    edited_team_solution: Optional[str] = None
+    approved_by: Optional[str] = None
+    approved_at: Optional[datetime] = None
+    resolution_type: Optional[str] = None
+    final_confidence: Optional[float] = None
+    status: Optional[str] = None
+
+
+class ConversationCreate(BaseModel):
+    message: str
+    attachment_url: Optional[str] = None
+
+
+class ConversationResponse(BaseModel):
+    id: UUID
+    ticket_id: UUID
+    sender_id: Optional[UUID] = None
+    sender_name: Optional[str] = None
+    sender_role: str
+    message: str
+    attachment_url: Optional[str] = None
+    is_internal: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 class TicketMessageCreate(BaseModel):

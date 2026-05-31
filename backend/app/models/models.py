@@ -273,6 +273,18 @@ class Ticket(Base):
     created_at = Column(TIMESTAMP, server_default=func.now())
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
     closed_at = Column(TIMESTAMP, nullable=True)
+    assigned_department_id = Column(PG_UUID(as_uuid=True), ForeignKey("departments.id"), nullable=True)
+    resolved_by = Column(String(100), nullable=True)
+    resolved_at = Column(TIMESTAMP, nullable=True)
+    resolution_type = Column(String(50), nullable=True)
+    final_resolution_confidence = Column(Numeric(6, 2), nullable=True)
+    closed_by_user = Column(Boolean, nullable=False, default=False)
+    ai_resolution_rejected = Column(Boolean, nullable=False, default=False)
+    # AI resolution workflow (3-level)
+    original_ai_solution = Column(Text, nullable=True)
+    edited_team_solution = Column(Text, nullable=True)
+    ai_solution_approved_by = Column(String(255), nullable=True)
+    ai_solution_approved_at = Column(TIMESTAMP, nullable=True)
 
     @property
     def ticket_id(self):
@@ -352,6 +364,7 @@ class TicketHistory(Base):
     old_value = Column(Text, nullable=True)
     new_value = Column(Text, nullable=True)
     changed_by = Column(PG_UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.now())
 
 
 class TicketResolution(Base):
@@ -504,6 +517,7 @@ class TicketAISuggestion(Base):
     suggested_steps_json = Column(JSONB, nullable=False)
     confidence = Column(Numeric(5, 4), nullable=False)
     recommended_escalation_team = Column(String(255), nullable=True)
+    resolution = Column(Text, nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
 
 
@@ -527,6 +541,95 @@ class TicketResolutionScore(Base):
     coverage_score = Column(Numeric(6, 2), nullable=True)
     resolution_quality_score = Column(Numeric(6, 2), nullable=True)
     classification_confidence = Column(Numeric(6, 2), nullable=True)
+    llm_verification_score = Column(Numeric(6, 2), nullable=True)
     final_resolution_confidence = Column(Numeric(6, 2), nullable=True)
     decision = Column(String(50), nullable=True)
+    decision_reason = Column(Text, nullable=True)
+    matched_kb_article_id = Column(PG_UUID(as_uuid=True), nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
+
+
+class TicketTimeline(Base):
+    __tablename__ = "ticket_timeline"
+
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ticket_id = Column(PG_UUID(as_uuid=True), ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False)
+    event_type = Column(String(100), nullable=False)
+    event_label = Column(String(255), nullable=True)
+    event_data = Column(JSONB, nullable=True)
+    performed_by = Column(String(100), nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+
+# ── Dynamic AI Action Engine ───────────────────────────────────────────────────
+
+class ToolRegistration(Base):
+    """Registered external API tools available for automated action execution."""
+    __tablename__ = "tool_registrations"
+
+    id          = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name        = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    base_url    = Column(String(500), nullable=False)
+    auth_type   = Column(String(50), nullable=False, default="none")  # none, bearer, api_key, basic
+    auth_config = Column(JSONB, nullable=True)   # {"token": "...", "header": "X-API-Key", "key": "..."}
+    is_active   = Column(Boolean, nullable=False, default=True)
+    created_at  = Column(TIMESTAMP, server_default=func.now())
+
+
+class ToolCatalogOperation(Base):
+    """Individual OpenAPI operations extracted from a registered tool."""
+    __tablename__ = "tool_catalog_operations"
+
+    id            = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tool_id       = Column(PG_UUID(as_uuid=True), ForeignKey("tool_registrations.id", ondelete="CASCADE"), nullable=False)
+    operation_id  = Column(String(255), nullable=False, unique=True)   # e.g. "resetUserPassword"
+    http_method   = Column(String(10),  nullable=False)                # GET POST PUT PATCH DELETE
+    path          = Column(String(500), nullable=False)                # /api/users/{user_email}/reset-password
+    summary       = Column(String(500), nullable=True)
+    description   = Column(Text, nullable=True)
+    risk_level    = Column(String(20),  nullable=False, default="MEDIUM")  # LOW MEDIUM HIGH
+    parameters    = Column(JSONB, nullable=True)   # [{"name":"user_email","in":"path","required":true,"source":"ticket_creator_email","description":"..."}]
+    side_effects  = Column(JSONB, nullable=True)   # ["Sends email to user","Logs out active sessions"]
+    is_active     = Column(Boolean, nullable=False, default=True)
+    created_at    = Column(TIMESTAMP, server_default=func.now())
+
+
+class TicketActionExecution(Base):
+    """Record of each automated action executed (or attempted) for a ticket."""
+    __tablename__ = "ticket_action_executions"
+
+    id               = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ticket_id        = Column(PG_UUID(as_uuid=True), ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False)
+    operation_id     = Column(String(255), nullable=True)
+    tool_operation_id = Column(PG_UUID(as_uuid=True), ForeignKey("tool_catalog_operations.id"), nullable=True)
+    execution_status = Column(String(50),  nullable=False, default="PENDING")
+    execution_result = Column(JSONB, nullable=True)
+    parameters_used  = Column(JSONB, nullable=True)
+    confidence       = Column(Numeric(5, 2), nullable=True)
+    risk_level       = Column(String(20), nullable=True)
+    selection_reason = Column(Text, nullable=True)
+    risk_reason      = Column(Text, nullable=True)
+    action_summary   = Column(Text, nullable=True)
+    user_confirmed   = Column(Boolean, nullable=True)
+    executed_at      = Column(TIMESTAMP, server_default=func.now())
+
+
+# ── Enterprise Chat (P1/P2 full conversation thread) ──────────────────────────
+
+class TicketConversation(Base):
+    """
+    Structured conversation thread for a ticket.
+    All P1/P2 messages between user, team and admin are stored here.
+    AI-generated internal notes (is_internal=True) are visible to team/admin only.
+    """
+    __tablename__ = "ticket_conversations"
+
+    id             = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ticket_id      = Column(PG_UUID(as_uuid=True), ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False)
+    sender_id      = Column(PG_UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=True)
+    sender_role    = Column(String(50), nullable=False)   # USER / TEAM / ADMIN / AI
+    message        = Column(Text, nullable=False)
+    attachment_url = Column(String(500), nullable=True)
+    is_internal    = Column(Boolean, nullable=False, default=False)  # True = team/admin eyes only
+    created_at     = Column(TIMESTAMP, server_default=func.now())

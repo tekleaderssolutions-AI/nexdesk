@@ -1,4 +1,5 @@
 import datetime
+import re
 from typing import List, Optional
 from sqlalchemy.orm import Session
 
@@ -6,8 +7,38 @@ from sqlalchemy import func as sql_func
 from app.models import Attachment, Ticket, TicketRelationship, User
 from app.models.models import (
     Category, Department, Notification, Subcategory, Team, TeamMember, TicketHistory,
+    TicketTimeline,
 )
 from app.services.semantic_duplicate_service import run_semantic_duplicate_resolution
+
+
+def _is_p1_emergency(subject: str, description: str, explicit_priority: Optional[str]) -> bool:
+    """Return True if the ticket is explicitly a P1 emergency."""
+    if explicit_priority and explicit_priority.upper() == "P1":
+        return True
+    combined = f"{subject or ''} {description or ''}"
+    return bool(re.search(r'\bP1\b', combined, re.IGNORECASE))
+
+
+def _assign_p1_team(db: Session, user: User) -> Optional[Team]:
+    """Find the best team to directly assign a P1 ticket to."""
+    if user.department_id:
+        team = (
+            db.query(Team)
+            .filter(Team.department_id == user.department_id, Team.is_active == True)
+            .first()
+        )
+        if team:
+            return team
+    # Fallback: any active team in the organisation
+    depts = db.query(Department).filter(
+        Department.organization_id == user.organization_id,
+        Department.is_active == True,
+    ).all()
+    dept_ids = [d.id for d in depts]
+    if dept_ids:
+        return db.query(Team).filter(Team.department_id.in_(dept_ids), Team.is_active == True).first()
+    return None
 
 
 def _enrich_with_relationship(db: Session, ticket: Ticket) -> Ticket:
@@ -63,6 +94,24 @@ def _enrich_list_with_relationships(db: Session, tickets: List[Ticket]) -> List[
             ticket.relationship_type = None
 
     return tickets
+
+
+def add_timeline_event(
+    db: Session,
+    ticket_id: str,
+    event_type: str,
+    event_label: Optional[str] = None,
+    event_data: Optional[dict] = None,
+    performed_by: Optional[str] = None,
+) -> None:
+    db.add(TicketTimeline(
+        ticket_id=ticket_id,
+        event_type=event_type,
+        event_label=event_label,
+        event_data=event_data,
+        performed_by=performed_by,
+    ))
+    db.commit()
 
 
 def get_ticket_relationships(db: Session, ticket_id: str):
@@ -145,6 +194,8 @@ def create_ticket(
     emergency_override: bool = False,
     attachments: Optional[List[dict]] = None,
 ) -> Ticket:
+    is_p1 = _is_p1_emergency(subject, description, priority)
+
     ticket_no = generate_ticket_number(db)
     ticket = Ticket(
         ticket_no=ticket_no,
@@ -155,10 +206,10 @@ def create_ticket(
         subcategory_id=subcategory_id,
         subject=subject,
         description=description,
-        priority=priority or "P3",
+        priority="P1" if is_p1 else (priority or "P3"),
         source=source or "PORTAL",
-        major_incident_flag=major_incident_flag,
-        emergency_override=emergency_override,
+        major_incident_flag=True if is_p1 else major_incident_flag,
+        emergency_override=True if is_p1 else emergency_override,
         status="OPEN",
     )
     db.add(ticket)
@@ -169,19 +220,79 @@ def create_ticket(
         create_attachments(db=db, ticket=ticket, attachments=attachments, uploaded_by=str(user.user_id))
         db.refresh(ticket)
 
-    # Run semantic duplicate resolution engine
+    # Timeline: ticket created
     try:
-        attachment_text = None
-        if attachments:
-            attachment_text = " ".join([
-                f"{a.get('file_name', '')} {a.get('file_type', '')}"
-                for a in attachments if a
-            ])
-        run_semantic_duplicate_resolution(db=db, ticket=ticket, user=user, attachment_text=attachment_text)
-    except Exception as e:
-        print(f"[ERROR] Duplicate engine failed: {e}")
-        # Duplicate engine must not break ticket creation flow
+        add_timeline_event(db, str(ticket.id), "TICKET_CREATED",
+                           f"Ticket {ticket.ticket_no} submitted",
+                           performed_by=str(user.user_id))
+    except Exception:
         pass
+
+    # Notification: user confirmation
+    try:
+        from app.services.notification_service import notify_ticket_created
+        notify_ticket_created(db, ticket, user.user_id)
+    except Exception:
+        pass
+
+    if is_p1:
+        # P1 Emergency: skip duplicate engine and KB/resolution pipeline.
+        # Run classification only to determine the correct team — then pin priority back to P1.
+        try:
+            from app.services.classification_service import run_classification_pipeline
+            run_classification_pipeline(db, ticket)
+            db.refresh(ticket)
+            # Classification may have changed priority/urgency/impact — restore P1.
+            ticket.priority = "P1"
+            ticket.major_incident_flag = True
+            ticket.emergency_override = True
+            db.commit()
+            db.refresh(ticket)
+            if ticket.assigned_team_id:
+                add_timeline_event(
+                    db, str(ticket.id), "P1_DIRECT_ASSIGN",
+                    f"P1 Emergency: classified and assigned to team",
+                    performed_by=str(user.user_id),
+                )
+                print(f"[P1] Ticket {ticket.ticket_no} classified and assigned to team")
+            else:
+                # Fallback: assign by department if classification found no team
+                team = _assign_p1_team(db, user)
+                if team:
+                    ticket.assigned_team_id = team.id
+                    ticket.status = "IN_PROGRESS"
+                    db.commit()
+                    db.refresh(ticket)
+                    add_timeline_event(
+                        db, str(ticket.id), "P1_DIRECT_ASSIGN",
+                        f"P1 Emergency: directly assigned to {team.team_name}",
+                        performed_by=str(user.user_id),
+                    )
+                    print(f"[P1] Ticket {ticket.ticket_no} fallback-assigned to team '{team.team_name}'")
+        except Exception as e:
+            print(f"[ERROR] P1 classification/assignment failed: {e}")
+    else:
+        # Run semantic duplicate resolution engine
+        try:
+            attachment_text = None
+            if attachments:
+                attachment_text = " ".join([
+                    f"{a.get('file_name', '')} {a.get('file_type', '')}"
+                    for a in attachments if a
+                ])
+            run_semantic_duplicate_resolution(db=db, ticket=ticket, user=user, attachment_text=attachment_text)
+        except Exception as e:
+            print(f"[ERROR] Duplicate engine failed: {e}")
+
+        db.refresh(ticket)
+
+        # Run KB similarity + auto-resolve pipeline live on ticket creation
+        try:
+            from app.services.kb_similarity_service import run_resolution_confidence
+            run_resolution_confidence(db, ticket)
+            db.refresh(ticket)
+        except Exception as e:
+            print(f"[ERROR] KB resolution confidence failed: {e}")
 
     db.refresh(ticket)
     return ticket
@@ -370,12 +481,21 @@ def update_ticket(
 
 def update_ticket_status(db: Session, ticket: Ticket, status: str) -> Ticket:
     status = status.upper()
-    valid_statuses = {"OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED", "REOPENED"}
+    valid_statuses = {
+        "OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED", "REOPENED",
+        "ESCALATED", "ON_HOLD",
+    }
     if status not in valid_statuses:
         raise ValueError(f"Invalid status: {status}")
 
     ticket.status = status
-    ticket.closed_at = datetime.datetime.utcnow() if status == "CLOSED" else None
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if status == "CLOSED":
+        ticket.closed_at = now
+    if status == "RESOLVED":
+        ticket.resolved_at = now
+        if not ticket.resolved_by:
+            ticket.resolved_by = "TEAM"
     db.add(ticket)
     db.commit()
     db.refresh(ticket)
@@ -400,46 +520,142 @@ def assign_ticket(
     return ticket
 
 
+# ── AI Resolution accept / reject ─────────────────────────────────────────────
+
+def accept_ai_resolution(db: Session, ticket: Ticket, user: User) -> Ticket:
+    if ticket.status != "AI_RESOLVED_PENDING_USER_CONFIRMATION":
+        raise ValueError("Ticket is not pending user confirmation")
+    if ticket.created_by != user.user_id:
+        raise PermissionError("Only the ticket creator can accept this resolution")
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    ticket.status = "CLOSED"
+    ticket.closed_by_user = True
+    ticket.closed_at = now
+    db.add(ticket)
+    db.commit()
+    db.refresh(ticket)
+
+    add_timeline_event(db, str(ticket.id), "USER_ACCEPTED_AI_RESOLUTION",
+                       "User accepted AI resolution",
+                       performed_by=str(user.user_id))
+    add_timeline_event(db, str(ticket.id), "TICKET_CLOSED",
+                       "Ticket closed by user after accepting AI resolution",
+                       performed_by=str(user.user_id))
+
+    try:
+        from app.services.notification_service import notify_ai_resolution_accepted
+        notify_ai_resolution_accepted(db, ticket, user.user_id,
+                                      team_id=ticket.assigned_team_id)
+    except Exception:
+        pass
+
+    _enrich_with_relationship(db, ticket)
+    _enrich_ticket_names(db, ticket)
+    return ticket
+
+
+def reject_ai_resolution(db: Session, ticket: Ticket, user: User) -> Ticket:
+    if ticket.status != "AI_RESOLVED_PENDING_USER_CONFIRMATION":
+        raise ValueError("Ticket is not pending user confirmation")
+    if ticket.created_by != user.user_id:
+        raise PermissionError("Only the ticket creator can reject this resolution")
+
+    ticket.status = "OPEN"
+    ticket.ai_resolution_rejected = True
+    db.add(ticket)
+    db.commit()
+    db.refresh(ticket)
+
+    add_timeline_event(db, str(ticket.id), "AI_RESOLUTION_REJECTED",
+                       "User rejected AI resolution — ticket routed to support team",
+                       performed_by=str(user.user_id))
+
+    try:
+        from app.services.notification_service import notify_ai_resolution_rejected
+        notify_ai_resolution_rejected(db, ticket, user.user_id,
+                                      team_id=ticket.assigned_team_id)
+    except Exception:
+        pass
+
+    _enrich_with_relationship(db, ticket)
+    _enrich_ticket_names(db, ticket)
+    return ticket
+
+
 # ── Timeline ───────────────────────────────────────────────────────────────────
 
 def get_ticket_timeline(db: Session, ticket_id: str) -> List[dict]:
-    """Return TicketHistory rows for a ticket as timeline events, newest last."""
-    rows = (
+    """Merge TicketTimeline lifecycle events with TicketHistory field-change events."""
+    _FIELD_LABEL = {
+        "category_id":      "Category assigned",
+        "subcategory_id":   "Subcategory assigned",
+        "priority":         "Priority assigned",
+        "impact":           "Impact assessed",
+        "urgency":          "Urgency assessed",
+        "assigned_team_id": "Team assigned",
+        "status":           "Status changed",
+    }
+
+    history_rows = (
         db.query(TicketHistory)
         .filter(TicketHistory.ticket_id == ticket_id)
         .order_by(TicketHistory.id)
         .all()
     )
-    _FIELD_LABEL = {
-        "category_id":     "Category assigned",
-        "subcategory_id":  "Subcategory assigned",
-        "priority":        "Priority assigned",
-        "impact":          "Impact assessed",
-        "urgency":         "Urgency assessed",
-        "assigned_team_id": "Team assigned",
-        "status":          "Status changed",
-    }
-    return [
+    history_events = [
         {
             "id": str(row.id),
             "event": _FIELD_LABEL.get(row.field_changed, row.field_changed),
             "value": row.new_value,
             "old_value": row.old_value,
             "changed_by": "AI Agent" if row.changed_by is None else str(row.changed_by),
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "source": "history",
         }
-        for row in rows
+        for row in history_rows
     ]
+
+    lifecycle_rows = (
+        db.query(TicketTimeline)
+        .filter(TicketTimeline.ticket_id == ticket_id)
+        .order_by(TicketTimeline.created_at)
+        .all()
+    )
+    lifecycle_events = [
+        {
+            "id": str(row.id),
+            "event": row.event_label or row.event_type,
+            "value": row.event_type,
+            "old_value": None,
+            "changed_by": row.performed_by or "System",
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "source": "lifecycle",
+        }
+        for row in lifecycle_rows
+    ]
+
+    # Lifecycle events first (chronological), then field-change history
+    return lifecycle_events + history_events
 
 
 # ── Dashboard stats ────────────────────────────────────────────────────────────
 
 def get_admin_dashboard_stats(db: Session) -> dict:
-    """Aggregate ticket counts by status, priority, and per-team workload."""
+    """Aggregate ticket counts by status, priority, per-team workload, and AI resolution metrics."""
     all_tickets = db.query(Ticket).all()
 
     status_counts: dict = {}
     priority_counts: dict = {}
     team_counts: dict = {}
+
+    # AI resolution tracking
+    ai_auto_resolved    = 0
+    ai_team_review      = 0
+    human_resolved      = 0
+    ai_accepted         = 0
+    ai_rejected         = 0
+    team_edited_ai      = 0
 
     for t in all_tickets:
         status_counts[t.status] = status_counts.get(t.status, 0) + 1
@@ -447,6 +663,47 @@ def get_admin_dashboard_stats(db: Session) -> dict:
         if t.assigned_team_id:
             key = str(t.assigned_team_id)
             team_counts[key] = team_counts.get(key, 0) + 1
+
+        # AI resolution metrics
+        rt = (t.resolution_type or "").upper()
+        if rt == "AI_AUTO_RESOLVE":
+            ai_auto_resolved += 1
+        elif rt == "AI_TEAM_REVIEW":
+            ai_team_review += 1
+        elif t.status in ("RESOLVED", "CLOSED") and rt not in ("AI_AUTO_RESOLVE", "AI_TEAM_REVIEW"):
+            human_resolved += 1
+
+        if t.closed_by_user and rt == "AI_AUTO_RESOLVE":
+            ai_accepted += 1
+        if t.ai_resolution_rejected:
+            ai_rejected += 1
+        if t.edited_team_solution:
+            team_edited_ai += 1
+
+    # Acceptance / rejection rates
+    total_ai_delivered = ai_accepted + ai_rejected
+    ai_acceptance_rate = round(ai_accepted / total_ai_delivered * 100, 1) if total_ai_delivered else 0.0
+    ai_rejection_rate  = round(ai_rejected / total_ai_delivered * 100, 1) if total_ai_delivered else 0.0
+
+    # Most successful KB articles (tickets that were AI_AUTO_RESOLVE and accepted)
+    from app.models.models import TicketResolutionScore, KnowledgeBase
+    kb_rows = (
+        db.query(TicketResolutionScore.matched_kb_article_id, sql_func.count().label("cnt"))
+        .filter(TicketResolutionScore.matched_kb_article_id.isnot(None))
+        .group_by(TicketResolutionScore.matched_kb_article_id)
+        .order_by(sql_func.count().desc())
+        .limit(5)
+        .all()
+    )
+    kb_ids = [r[0] for r in kb_rows if r[0]]
+    kb_map = {}
+    if kb_ids:
+        kb_articles = db.query(KnowledgeBase).filter(KnowledgeBase.id.in_(kb_ids)).all()
+        kb_map = {str(a.id): a.title for a in kb_articles}
+    top_kb_articles = [
+        {"article_id": str(r[0]), "title": kb_map.get(str(r[0]), str(r[0])), "usage_count": r[1]}
+        for r in kb_rows if r[0]
+    ]
 
     # Resolve team names
     team_name_map = {}
@@ -459,22 +716,32 @@ def get_admin_dashboard_stats(db: Session) -> dict:
         for tid, cnt in sorted(team_counts.items(), key=lambda x: -x[1])
     ]
 
-    open_count      = status_counts.get("OPEN", 0)
-    assigned_count  = status_counts.get("ASSIGNED", 0)
-    pending_count   = status_counts.get("PENDING_ADMIN_REVIEW", 0)
-    resolved_count  = status_counts.get("RESOLVED", 0) + status_counts.get("CLOSED", 0)
-    in_progress     = status_counts.get("IN_PROGRESS", 0)
+    open_count     = status_counts.get("OPEN", 0)
+    assigned_count = status_counts.get("ASSIGNED", 0)
+    pending_count  = status_counts.get("PENDING_ADMIN_REVIEW", 0)
+    resolved_count = status_counts.get("RESOLVED", 0) + status_counts.get("CLOSED", 0)
+    in_progress    = status_counts.get("IN_PROGRESS", 0)
 
     return {
-        "total_tickets": len(all_tickets),
-        "open": open_count,
-        "assigned": assigned_count,
-        "in_progress": in_progress,
-        "pending_review": pending_count,
-        "resolved": resolved_count,
+        "total_tickets":    len(all_tickets),
+        "open":             open_count,
+        "assigned":         assigned_count,
+        "in_progress":      in_progress,
+        "pending_review":   pending_count,
+        "resolved":         resolved_count,
         "status_breakdown": status_counts,
         "priority_breakdown": priority_counts,
-        "team_workload": team_workload,
+        "team_workload":    team_workload,
+        # ── AI resolution metrics ─────────────────────────────────────────────
+        "ai_auto_resolved":    ai_auto_resolved,
+        "ai_team_review":      ai_team_review,
+        "human_resolved":      human_resolved,
+        "ai_accepted":         ai_accepted,
+        "ai_rejected":         ai_rejected,
+        "team_edited_ai":      team_edited_ai,
+        "ai_acceptance_rate":  ai_acceptance_rate,
+        "ai_rejection_rate":   ai_rejection_rate,
+        "top_kb_articles":     top_kb_articles,
     }
 
 
@@ -493,7 +760,7 @@ def get_ticket_messages(db: Session, ticket_id: str) -> List[dict]:
             "id": str(m.id),
             "ticket_id": str(m.ticket_id),
             "sender_id": str(m.sender_id) if m.sender_id else None,
-            "sender_name": full_name or "Unknown",
+            "sender_name": full_name or ("AI Agent" if m.sender_type == "AI" else "Unknown"),
             "sender_type": m.sender_type,
             "message_body": m.message_body,
             "created_at": m.created_at,
@@ -744,4 +1011,126 @@ def get_department_dashboard_stats(db: Session, user) -> dict:
         "last_week":          last_week,
         "trend_week_pct":     pct(this_week, last_week),
         "recent_activity":    recent_activity,
+    }
+
+
+# ── Team AI Action (Approve / Edit / Reject) ───────────────────────────────────
+
+def team_ai_action(db: Session, ticket: Ticket, action: str, edited_solution: Optional[str], agent) -> Ticket:
+    """
+    Process a team member's decision on the AI suggested resolution.
+
+    APPROVE → send original AI solution to user, status = TEAM_APPROVED_AI_RESPONSE
+    EDIT    → send edited solution to user, store both, status = TEAM_APPROVED_AI_RESPONSE
+    REJECT  → status = IN_PROGRESS, team investigates manually
+    """
+    from app.models.models import TicketMessage, TicketConversation
+    action = action.upper()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    approved_by = getattr(agent, "full_name", None) or str(agent.user_id)
+
+    if action == "REJECT":
+        ticket.status = "IN_PROGRESS"
+        ticket.resolution_type = None
+        db.add(ticket)
+        db.commit()
+        add_timeline_event(db, str(ticket.id), "AI_SUGGESTION_REJECTED",
+                           f"Team rejected AI suggestion — ticket moved to IN_PROGRESS",
+                           performed_by=str(agent.user_id))
+    else:
+        # APPROVE or EDIT
+        solution = ticket.original_ai_solution or ""
+        if action == "EDIT" and edited_solution and edited_solution.strip():
+            ticket.edited_team_solution = edited_solution.strip()
+            solution = edited_solution.strip()
+
+        # Deliver solution to user via chat message
+        db.add(TicketMessage(
+            ticket_id=ticket.id,
+            sender_id=agent.user_id,
+            sender_type="TEAM",
+            message_type="CHAT",
+            message_body=solution,
+        ))
+
+        ticket.status = "TEAM_APPROVED_AI_RESPONSE"
+        ticket.ai_solution_approved_by = approved_by
+        ticket.ai_solution_approved_at = now
+        ticket.resolution_type = "AI_TEAM_REVIEW"
+        db.add(ticket)
+        db.commit()
+
+        label = (
+            f"Team edited and approved AI suggestion — solution sent to user"
+            if action == "EDIT"
+            else f"Team approved AI suggestion — solution sent to user"
+        )
+        add_timeline_event(db, str(ticket.id), "TEAM_APPROVED_AI_SOLUTION", label,
+                           performed_by=str(agent.user_id))
+
+    db.refresh(ticket)
+    _enrich_with_relationship(db, ticket)
+    _enrich_ticket_names(db, ticket)
+    return ticket
+
+
+# ── Conversations (P1/P2 structured thread) ────────────────────────────────────
+
+def get_ticket_conversations(db: Session, ticket_id: str, include_internal: bool = False) -> List[dict]:
+    from app.models.models import TicketConversation, User
+    q = (
+        db.query(TicketConversation, User.full_name)
+        .outerjoin(User, TicketConversation.sender_id == User.user_id)
+        .filter(TicketConversation.ticket_id == ticket_id)
+    )
+    if not include_internal:
+        q = q.filter(TicketConversation.is_internal == False)
+    rows = q.order_by(TicketConversation.created_at.asc()).all()
+    return [
+        {
+            "id": str(c.id),
+            "ticket_id": str(c.ticket_id),
+            "sender_id": str(c.sender_id) if c.sender_id else None,
+            "sender_name": full_name or ("AI Agent" if c.sender_role == "AI" else "Unknown"),
+            "sender_role": c.sender_role,
+            "message": c.message,
+            "attachment_url": c.attachment_url,
+            "is_internal": c.is_internal,
+            "created_at": c.created_at,
+        }
+        for c, full_name in rows
+    ]
+
+
+def create_conversation_message(db: Session, ticket_id: str, sender, message: str,
+                                attachment_url: Optional[str] = None) -> dict:
+    from app.models.models import TicketConversation, User
+    conv = TicketConversation(
+        ticket_id=ticket_id,
+        sender_id=sender.user_id,
+        sender_role=sender.role.upper(),
+        message=message.strip(),
+        attachment_url=attachment_url,
+        is_internal=False,
+    )
+    db.add(conv)
+    db.commit()
+    db.refresh(conv)
+
+    # Timeline event per message
+    add_timeline_event(db, ticket_id, "CONVERSATION_MESSAGE",
+                       f"{sender.role.title()} sent a message",
+                       performed_by=str(sender.user_id))
+
+    sender_name = getattr(sender, "full_name", None) or str(sender.user_id)
+    return {
+        "id": str(conv.id),
+        "ticket_id": str(conv.ticket_id),
+        "sender_id": str(conv.sender_id),
+        "sender_name": sender_name,
+        "sender_role": conv.sender_role,
+        "message": conv.message,
+        "attachment_url": conv.attachment_url,
+        "is_internal": conv.is_internal,
+        "created_at": conv.created_at,
     }

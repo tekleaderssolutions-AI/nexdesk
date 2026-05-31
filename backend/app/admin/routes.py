@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from uuid import UUID
-from typing import List
+from typing import List, Optional
+
+from pydantic import BaseModel
 
 from app.db.dependencies import get_db
 from app.auth.dependencies import get_current_admin
@@ -9,6 +11,47 @@ from app.models import User
 from app.admin import schemas, services
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+# ── Tool Registry Pydantic Schemas (inline — no separate file needed) ──────────
+
+class ToolOperationParam(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    # in: path | query | body
+    location: str = "body"
+    required: bool = False
+    # source: ticket_id | ticket_creator_email | ticket_creator_name | organization_id | static:<val> | llm_extract
+    source: str = "llm_extract"
+
+
+class ToolOperationCreate(BaseModel):
+    operation_id: str
+    http_method: str
+    path: str
+    summary: Optional[str] = ""
+    description: Optional[str] = ""
+    risk_level: str = "MEDIUM"
+    parameters: Optional[List[dict]] = []
+    side_effects: Optional[List[str]] = []
+
+
+class ToolRegistrationCreate(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    base_url: str
+    auth_type: str = "none"        # none | bearer | api_key | basic
+    auth_config: Optional[dict] = None
+    operations: Optional[List[ToolOperationCreate]] = []
+
+
+class ToolRegistrationUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    base_url: Optional[str] = None
+    auth_type: Optional[str] = None
+    auth_config: Optional[dict] = None
+    is_active: Optional[bool] = None
 
 
 # ==================== ORGANIZATIONS ====================
@@ -352,6 +395,23 @@ def generate_kb_embeddings(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/backfill-auto-resolve")
+def backfill_auto_resolve(
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Run the AI resolution confidence pipeline on all OPEN/IN_PROGRESS P3/P4/P5
+    tickets. Tickets scoring >= 90 are moved to AI_RESOLVED_PENDING_USER_CONFIRMATION.
+    P1/P2 tickets are never touched.
+    """
+    try:
+        from app.services.kb_similarity_service import run_auto_resolve_backfill
+        return run_auto_resolve_backfill(db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== SKILLS ====================
 
 @router.get("/skills", response_model=List[schemas.SkillResponse])
@@ -599,3 +659,255 @@ def reset_password(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Tool Registry ──────────────────────────────────────────────────────────────
+
+@router.post("/tools", status_code=201)
+def create_tool(
+    payload: ToolRegistrationCreate,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Register a new external API tool with its operations."""
+    from app.models.models import ToolRegistration, ToolCatalogOperation
+    tool = ToolRegistration(
+        name=payload.name,
+        description=payload.description,
+        base_url=payload.base_url.rstrip("/"),
+        auth_type=payload.auth_type,
+        auth_config=payload.auth_config,
+        is_active=True,
+    )
+    db.add(tool)
+    db.flush()
+
+    for op_data in (payload.operations or []):
+        params = []
+        for p in (op_data.parameters or []):
+            entry = dict(p)
+            if "location" in entry and "in" not in entry:
+                entry["in"] = entry.pop("location")
+            params.append(entry)
+        op = ToolCatalogOperation(
+            tool_id=tool.id,
+            operation_id=op_data.operation_id,
+            http_method=op_data.http_method.upper(),
+            path=op_data.path,
+            summary=op_data.summary,
+            description=op_data.description,
+            risk_level=(op_data.risk_level or "MEDIUM").upper(),
+            parameters=params,
+            side_effects=op_data.side_effects or [],
+            is_active=True,
+        )
+        db.add(op)
+
+    db.commit()
+    db.refresh(tool)
+    return {"id": str(tool.id), "name": tool.name, "base_url": tool.base_url, "is_active": tool.is_active}
+
+
+@router.get("/tools")
+def list_tools(
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    from app.models.models import ToolRegistration, ToolCatalogOperation
+    tools = db.query(ToolRegistration).order_by(ToolRegistration.is_active.desc()).all()
+    result = []
+    for t in tools:
+        op_count = db.query(ToolCatalogOperation).filter(
+            ToolCatalogOperation.tool_id == t.id, ToolCatalogOperation.is_active == True
+        ).count()
+        result.append({
+            "id": str(t.id),
+            "name": t.name,
+            "description": t.description,
+            "base_url": t.base_url,
+            "auth_type": t.auth_type,
+            "is_active": t.is_active,
+            "operation_count": op_count,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+        })
+    return result
+
+
+@router.get("/tools/catalog/active")
+def get_active_catalog(
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Return the full active tool catalog — same view the LLM receives."""
+    from app.services.action_engine_service import get_tool_catalog
+    return get_tool_catalog(db)
+
+
+@router.get("/tools/{tool_id}")
+def get_tool(
+    tool_id: UUID,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    from app.models.models import ToolRegistration, ToolCatalogOperation
+    tool = db.query(ToolRegistration).filter(ToolRegistration.id == tool_id).first()
+    if not tool:
+        raise HTTPException(status_code=404, detail="Tool not found")
+    ops = db.query(ToolCatalogOperation).filter(ToolCatalogOperation.tool_id == tool_id).all()
+    return {
+        "id": str(tool.id),
+        "name": tool.name,
+        "description": tool.description,
+        "base_url": tool.base_url,
+        "auth_type": tool.auth_type,
+        "is_active": tool.is_active,
+        "operations": [
+            {
+                "id": str(op.id),
+                "operation_id": op.operation_id,
+                "http_method": op.http_method,
+                "path": op.path,
+                "summary": op.summary,
+                "description": op.description,
+                "risk_level": op.risk_level,
+                "parameters": op.parameters or [],
+                "side_effects": op.side_effects or [],
+                "is_active": op.is_active,
+            }
+            for op in ops
+        ],
+    }
+
+
+@router.put("/tools/{tool_id}")
+def update_tool(
+    tool_id: UUID,
+    payload: ToolRegistrationUpdate,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    from app.models.models import ToolRegistration
+    tool = db.query(ToolRegistration).filter(ToolRegistration.id == tool_id).first()
+    if not tool:
+        raise HTTPException(status_code=404, detail="Tool not found")
+    if payload.name is not None:
+        tool.name = payload.name
+    if payload.description is not None:
+        tool.description = payload.description
+    if payload.base_url is not None:
+        tool.base_url = payload.base_url.rstrip("/")
+    if payload.auth_type is not None:
+        tool.auth_type = payload.auth_type
+    if payload.auth_config is not None:
+        tool.auth_config = payload.auth_config
+    if payload.is_active is not None:
+        tool.is_active = payload.is_active
+    db.add(tool)
+    db.commit()
+    return {"id": str(tool.id), "name": tool.name, "is_active": tool.is_active}
+
+
+@router.post("/tools/{tool_id}/operations", status_code=201)
+def add_operation(
+    tool_id: UUID,
+    payload: ToolOperationCreate,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    from app.models.models import ToolRegistration, ToolCatalogOperation
+    tool = db.query(ToolRegistration).filter(ToolRegistration.id == tool_id).first()
+    if not tool:
+        raise HTTPException(status_code=404, detail="Tool not found")
+    existing = db.query(ToolCatalogOperation).filter(
+        ToolCatalogOperation.operation_id == payload.operation_id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"operationId {payload.operation_id!r} already registered")
+    params = []
+    for p in (payload.parameters or []):
+        entry = dict(p)
+        if "location" in entry and "in" not in entry:
+            entry["in"] = entry.pop("location")
+        params.append(entry)
+    op = ToolCatalogOperation(
+        tool_id=tool_id,
+        operation_id=payload.operation_id,
+        http_method=payload.http_method.upper(),
+        path=payload.path,
+        summary=payload.summary,
+        description=payload.description,
+        risk_level=(payload.risk_level or "MEDIUM").upper(),
+        parameters=params,
+        side_effects=payload.side_effects or [],
+        is_active=True,
+    )
+    db.add(op)
+    db.commit()
+    db.refresh(op)
+    return {"id": str(op.id), "operation_id": op.operation_id, "risk_level": op.risk_level}
+
+
+@router.put("/tools/{tool_id}/operations/{op_id}")
+def update_operation(
+    tool_id: UUID,
+    op_id: UUID,
+    payload: ToolOperationCreate,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    from app.models.models import ToolCatalogOperation
+    op = db.query(ToolCatalogOperation).filter(
+        ToolCatalogOperation.id == op_id, ToolCatalogOperation.tool_id == tool_id
+    ).first()
+    if not op:
+        raise HTTPException(status_code=404, detail="Operation not found")
+    op.operation_id = payload.operation_id
+    op.http_method  = payload.http_method.upper()
+    op.path         = payload.path
+    op.summary      = payload.summary
+    op.description  = payload.description
+    op.risk_level   = (payload.risk_level or "MEDIUM").upper()
+    op.side_effects = payload.side_effects or []
+    params = []
+    for p in (payload.parameters or []):
+        entry = dict(p)
+        if "location" in entry and "in" not in entry:
+            entry["in"] = entry.pop("location")
+        params.append(entry)
+    op.parameters = params
+    db.add(op)
+    db.commit()
+    return {"id": str(op.id), "operation_id": op.operation_id}
+
+
+@router.delete("/tools/{tool_id}/operations/{op_id}", status_code=204)
+def delete_operation(
+    tool_id: UUID,
+    op_id: UUID,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    from app.models.models import ToolCatalogOperation
+    op = db.query(ToolCatalogOperation).filter(
+        ToolCatalogOperation.id == op_id, ToolCatalogOperation.tool_id == tool_id
+    ).first()
+    if not op:
+        raise HTTPException(status_code=404, detail="Operation not found")
+    op.is_active = False
+    db.add(op)
+    db.commit()
+
+
+@router.delete("/tools/{tool_id}", status_code=204)
+def deactivate_tool(
+    tool_id: UUID,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    from app.models.models import ToolRegistration
+    tool = db.query(ToolRegistration).filter(ToolRegistration.id == tool_id).first()
+    if not tool:
+        raise HTTPException(status_code=404, detail="Tool not found")
+    tool.is_active = False
+    db.add(tool)
+    db.commit()

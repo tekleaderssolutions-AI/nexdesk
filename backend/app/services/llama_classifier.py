@@ -90,6 +90,11 @@ Return JSON only:
                 "model": cls.MODEL_NAME,
                 "prompt": prompt,
                 "stream": False,
+                "options": {
+                    "num_ctx": 512,
+                    "num_predict": 100,
+                    "temperature": 0,
+                },
             }
             print(f"[LLAMA] POST {cls.OLLAMA_GENERATE_URL} | model={cls.MODEL_NAME} | prompt_len={len(prompt)}")
 
