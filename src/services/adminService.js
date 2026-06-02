@@ -7,148 +7,148 @@ const getHeaders = () => ({
   Authorization: `Bearer ${getAuthToken()}`,
 });
 
-// ==================== USERS ====================
-
-export const getUsers = async (skip = 0, limit = 100) => {
-  try {
-    const res = await fetch(`${API_BASE}/admin/users?skip=${skip}&limit=${limit}`, {
-      headers: getHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to fetch users');
-    return await res.json();
-  } catch (err) {
-    console.error('getUsers error:', err);
-    throw err;
+async function request(path, options = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: getHeaders(),
+    ...options,
+  });
+  if (res.status === 204) return null;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Request failed: ${res.status}`);
   }
-};
+  return res.json();
+}
 
-export const getUserById = async (userId) => {
-  try {
-    const res = await fetch(`${API_BASE}/admin/users/${userId}`, {
-      headers: getHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to fetch user');
-    return await res.json();
-  } catch (err) {
-    console.error('getUserById error:', err);
-    throw err;
-  }
-};
+// ==================== ORGANIZATIONS ====================
 
-export const createUser = async (payload) => {
-  try {
-    const res = await fetch(`${API_BASE}/admin/users`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({}));
-      throw new Error(error.detail || 'Failed to create user');
-    }
-    return await res.json();
-  } catch (err) {
-    console.error('createUser error:', err);
-    throw err;
-  }
-};
+export const getOrganizations = (skip = 0, limit = 100) =>
+  request(`/admin/organizations?skip=${skip}&limit=${limit}`);
 
-export const updateUser = async (userId, payload) => {
-  try {
-    const res = await fetch(`${API_BASE}/admin/users/${userId}`, {
-      method: 'PUT',
-      headers: getHeaders(),
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error('Failed to update user');
-    return await res.json();
-  } catch (err) {
-    console.error('updateUser error:', err);
-    throw err;
-  }
-};
+export const getOrganizationById = (id) =>
+  request(`/admin/organizations/${id}`);
 
-export const activateUser = async (userId) => {
-  try {
-    const res = await fetch(`${API_BASE}/admin/users/${userId}/activate`, {
-      method: 'PUT',
-      headers: getHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to activate user');
-    return await res.json();
-  } catch (err) {
-    console.error('activateUser error:', err);
-    throw err;
-  }
-};
+export const createOrganization = (payload) =>
+  request('/admin/organizations', { method: 'POST', body: JSON.stringify(payload) });
 
-export const deactivateUser = async (userId) => {
-  try {
-    const res = await fetch(`${API_BASE}/admin/users/${userId}/deactivate`, {
-      method: 'PUT',
-      headers: getHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to deactivate user');
-    return await res.json();
-  } catch (err) {
-    console.error('deactivateUser error:', err);
-    throw err;
-  }
-};
+export const updateOrganization = (id, payload) =>
+  request(`/admin/organizations/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
 
-export const resetPassword = async (userId) => {
-  try {
-    const res = await fetch(`${API_BASE}/admin/users/${userId}/reset-password`, {
-      method: 'PUT',
-      headers: getHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to reset password');
-    return await res.json();
-  } catch (err) {
-    console.error('resetPassword error:', err);
-    throw err;
-  }
-};
+export const deleteOrganization = (id) =>
+  request(`/admin/organizations/${id}`, { method: 'DELETE' });
 
 // ==================== DEPARTMENTS ====================
 
-export const getDepartments = async (skip = 0, limit = 100) => {
-  try {
-    const res = await fetch(`${API_BASE}/admin/departments?skip=${skip}&limit=${limit}`, {
-      headers: getHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to fetch departments');
-    return await res.json();
-  } catch (err) {
-    console.error('getDepartments error:', err);
-    throw err;
-  }
-};
+export const getDepartments = (skip = 0, limit = 100) =>
+  request(`/admin/departments?skip=${skip}&limit=${limit}`);
 
-export const getDepartmentById = async (departmentId) => {
-  try {
-    const res = await fetch(`${API_BASE}/admin/departments/${departmentId}`, {
-      headers: getHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to fetch department');
-    return await res.json();
-  } catch (err) {
-    console.error('getDepartmentById error:', err);
-    throw err;
-  }
-};
+export const getDepartmentById = (id) =>
+  request(`/admin/departments/${id}`);
 
-export const createDepartment = async (payload) => {
-  try {
-    const res = await fetch(`${API_BASE}/admin/departments`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error('Failed to create department');
-    return await res.json();
-  } catch (err) {
-    console.error('createDepartment error:', err);
-    throw err;
-  }
-};
+export const createDepartment = (payload) =>
+  request('/admin/departments', { method: 'POST', body: JSON.stringify(payload) });
+
+export const updateDepartment = (id, payload) =>
+  request(`/admin/departments/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+
+export const deleteDepartment = (id) =>
+  request(`/admin/departments/${id}`, { method: 'DELETE' });
+
+// ==================== TEAMS ====================
+
+export const getTeams = (skip = 0, limit = 100) =>
+  request(`/admin/teams?skip=${skip}&limit=${limit}`);
+
+export const getTeamsWithStats = (skip = 0, limit = 100) =>
+  request(`/admin/teams/stats?skip=${skip}&limit=${limit}`);
+
+export const getTeamById = (id) =>
+  request(`/admin/teams/${id}`);
+
+export const createTeam = (payload) =>
+  request('/admin/teams', { method: 'POST', body: JSON.stringify(payload) });
+
+export const updateTeam = (id, payload) =>
+  request(`/admin/teams/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+
+export const deleteTeam = (id) =>
+  request(`/admin/teams/${id}`, { method: 'DELETE' });
+
+// ==================== TEAM MEMBERS ====================
+
+export const getTeamMembers = (skip = 0, limit = 100) =>
+  request(`/admin/team-members?skip=${skip}&limit=${limit}`);
+
+export const createTeamMember = (payload) =>
+  request('/admin/team-members', { method: 'POST', body: JSON.stringify(payload) });
+
+export const updateTeamMember = (id, payload) =>
+  request(`/admin/team-members/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+
+export const deleteTeamMember = (id) =>
+  request(`/admin/team-members/${id}`, { method: 'DELETE' });
+
+// ==================== MEMBER SKILLS (inline) ====================
+
+export const getMemberSkills = (memberId) =>
+  request(`/admin/team-members/${memberId}/skills`);
+
+export const addMemberSkill = (memberId, payload) =>
+  request(`/admin/team-members/${memberId}/skills`, { method: 'POST', body: JSON.stringify(payload) });
+
+export const removeMemberSkill = (tmsId) =>
+  request(`/admin/team-member-skills/${tmsId}`, { method: 'DELETE' });
+
+// ==================== SKILLS ====================
+
+export const getSkills = (skip = 0, limit = 100) =>
+  request(`/admin/skills?skip=${skip}&limit=${limit}`);
+
+export const getSkillById = (id) =>
+  request(`/admin/skills/${id}`);
+
+export const createSkill = (payload) =>
+  request('/admin/skills', { method: 'POST', body: JSON.stringify(payload) });
+
+export const updateSkill = (id, payload) =>
+  request(`/admin/skills/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+
+export const deleteSkill = (id) =>
+  request(`/admin/skills/${id}`, { method: 'DELETE' });
+
+// ==================== TEAM MEMBER SKILLS ====================
+
+export const getTeamMemberSkills = (skip = 0, limit = 100) =>
+  request(`/admin/team-member-skills?skip=${skip}&limit=${limit}`);
+
+export const createTeamMemberSkill = (payload) =>
+  request('/admin/team-member-skills', { method: 'POST', body: JSON.stringify(payload) });
+
+export const updateTeamMemberSkill = (id, payload) =>
+  request(`/admin/team-member-skills/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+
+export const deleteTeamMemberSkill = (id) =>
+  request(`/admin/team-member-skills/${id}`, { method: 'DELETE' });
+
+// ==================== USERS ====================
+
+export const getUsers = (skip = 0, limit = 100) =>
+  request(`/admin/users?skip=${skip}&limit=${limit}`);
+
+export const getUserById = (userId) =>
+  request(`/admin/users/${userId}`);
+
+export const createUser = (payload) =>
+  request('/admin/users', { method: 'POST', body: JSON.stringify(payload) });
+
+export const updateUser = (userId, payload) =>
+  request(`/admin/users/${userId}`, { method: 'PUT', body: JSON.stringify(payload) });
+
+export const activateUser = (userId) =>
+  request(`/admin/users/${userId}/activate`, { method: 'PUT' });
+
+export const deactivateUser = (userId) =>
+  request(`/admin/users/${userId}/deactivate`, { method: 'PUT' });
+
+export const resetPassword = (userId) =>
+  request(`/admin/users/${userId}/reset-password`, { method: 'PUT' });

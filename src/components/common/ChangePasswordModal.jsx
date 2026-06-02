@@ -44,7 +44,7 @@ function ChangePasswordModal({ isOpen, onClose }) {
     await new Promise((resolve) => setTimeout(resolve, 800));
 
     try {
-      const result = changePassword(currentPassword, newPassword, user ? null : email);
+      const result = await changePassword(currentPassword, newPassword, user ? null : email);
       if (result.success) {
         setSuccess(result.message);
         setCurrentPassword('');

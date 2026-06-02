@@ -13,6 +13,7 @@ import {
   saveUsers,
   saveUserSession,
   backendLogin,
+  backendChangePassword,
   saveAuthToken,
 } from '../services/authService';
 
@@ -193,10 +194,21 @@ export function AuthProvider({ children }) {
     return record;
   };
 
-  const changePassword = (currentPassword, newPassword, email = null) => {
+  const changePassword = async (currentPassword, newPassword, email = null) => {
     const targetEmail = (email || user?.email || '').trim().toLowerCase();
     if (!targetEmail) return { success: false, message: 'Email address is required.' };
 
+    const backendResult = await backendChangePassword(targetEmail, currentPassword, newPassword);
+    if (backendResult.success) {
+      if (user && user.email.trim().toLowerCase() === targetEmail) {
+        const updatedUser = { ...user, password: newPassword };
+        setUser(updatedUser);
+        saveUserSession(updatedUser);
+      }
+      return backendResult;
+    }
+
+    // Fall back to local auth storage if backend is unreachable or not available
     const customPasswords = JSON.parse(localStorage.getItem('custom_passwords') || '{}');
     let foundAccount = null;
 

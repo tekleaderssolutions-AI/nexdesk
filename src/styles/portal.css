@@ -1101,3 +1101,234 @@ body {
   --accent: #a855f7;
   --accent-dark: #7c3aed;
 }
+
+/* ── Badge base + Priority ──────────────────────────────────────────────────── */
+
+.b {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 20px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.p1 { color: #f87171; background: rgba(239,68,68,.1);  border-color: rgba(239,68,68,.22); }
+.p2 { color: #fb923c; background: rgba(249,115,22,.1); border-color: rgba(249,115,22,.22); }
+.p3 { color: #fbbf24; background: rgba(234,179,8,.1);  border-color: rgba(234,179,8,.22); }
+.p4 { color: #4f8ef7; background: rgba(79,142,247,.1); border-color: rgba(79,142,247,.22); }
+.p5 { color: #94a3b8; background: rgba(100,116,139,.1);border-color: rgba(100,116,139,.22); }
+
+/* ── Status badges ─────────────────────────────────────────────────────────── */
+
+.s-open  { color: #4f8ef7; background: rgba(79,142,247,.1);  border-color: rgba(79,142,247,.2); }
+.s-prog  { color: #fbbf24; background: rgba(251,191,36,.1);  border-color: rgba(251,191,36,.2); }
+.s-res   { color: #34d399; background: rgba(52,211,153,.1);  border-color: rgba(52,211,153,.2); }
+.s-reo   { color: #fb923c; background: rgba(249,115,22,.1);  border-color: rgba(249,115,22,.2); }
+.s-ai    { color: #a78bfa; background: rgba(167,139,250,.1); border-color: rgba(167,139,250,.2); }
+.s-esc   { color: #f87171; background: rgba(239,68,68,.1);   border-color: rgba(239,68,68,.2); }
+.s-pend  { color: #94a3b8; background: rgba(100,116,139,.1); border-color: rgba(100,116,139,.2); }
+.s-ai-pend { color: #34d399; background: rgba(52,211,153,.1); border-color: rgba(52,211,153,.25); }
+
+/* ── Select element ─────────────────────────────────────────────────────────── */
+
+.sel {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 9px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.sel:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+/* ── Timeline ───────────────────────────────────────────────────────────────── */
+
+.tl-item {
+  position: relative;
+  padding-left: 22px;
+  padding-bottom: 16px;
+}
+
+.tl-item:last-child {
+  padding-bottom: 0;
+}
+
+.tl-item::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 16px;
+  bottom: 0;
+  width: 1px;
+  background: #101828;
+}
+
+.tl-item:last-child::before {
+  display: none;
+}
+
+.tl-dot {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid #07090f;
+  flex-shrink: 0;
+}
+
+/* ── Progress bar ───────────────────────────────────────────────────────────── */
+
+.pbar {
+  height: 3px;
+  background: #101828;
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.pfill {
+  height: 100%;
+  border-radius: 99px;
+  background: var(--accent);
+  transition: width .4s ease;
+}
+
+/* ── AI panel ───────────────────────────────────────────────────────────────── */
+
+.ai-panel {
+  background: linear-gradient(135deg, rgba(124,77,255,.08) 0%, rgba(59,111,255,.06) 100%);
+  border: 1px solid rgba(124,77,255,.18);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-top: 10px;
+}
+
+/* ── Chat bubbles ───────────────────────────────────────────────────────────── */
+
+.msg-me {
+  background: linear-gradient(135deg, #3b6fff, #4f8ef7);
+  color: #fff;
+  padding: 9px 14px;
+  border-radius: 16px 16px 4px 16px;
+  font-size: 13px;
+  max-width: 80%;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.msg-them {
+  background: #0c1220;
+  border: 1px solid #101828;
+  color: #c9d8ee;
+  padding: 9px 14px;
+  border-radius: 16px 16px 16px 4px;
+  font-size: 13px;
+  max-width: 80%;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.msg-ai {
+  background: rgba(124,77,255,.07);
+  border: 1px solid rgba(124,77,255,.2);
+  color: #c9d8ee;
+  padding: 9px 14px;
+  border-radius: 16px 16px 16px 4px;
+  font-size: 13px;
+  max-width: 85%;
+  word-break: break-word;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+/* ── Resolution type badges ─────────────────────────────────────────────────── */
+
+.badge-ai-solved {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(52,211,153,.1);
+  color: #34d399;
+  border: 1px solid rgba(52,211,153,.25);
+  letter-spacing: .03em;
+}
+
+.badge-team-approved {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(79,142,247,.1);
+  color: #4f8ef7;
+  border: 1px solid rgba(79,142,247,.25);
+  letter-spacing: .03em;
+}
+
+.badge-human {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(251,146,60,.1);
+  color: #fb923c;
+  border: 1px solid rgba(251,146,60,.25);
+  letter-spacing: .03em;
+}
+
+.badge-ai-review {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(168,85,247,.1);
+  color: #a855f7;
+  border: 1px solid rgba(168,85,247,.25);
+  letter-spacing: .03em;
+}
+
+/* AI Team Review suggestion panel */
+.ai-review-panel {
+  background: linear-gradient(135deg, rgba(168,85,247,.06), rgba(12,18,32,.8));
+  border: 1px solid rgba(168,85,247,.2);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+/* ── btn-link ───────────────────────────────────────────────────────────────── */
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

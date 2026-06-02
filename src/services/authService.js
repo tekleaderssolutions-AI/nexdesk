@@ -60,6 +60,23 @@ export const saveAuthToken = (token) => {
   localStorage.setItem(TOKEN_KEY, token);
 };
 
+export const backendChangePassword = async (email, currentPassword, newPassword) => {
+  try {
+    const res = await fetch('http://127.0.0.1:8000/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, current_password: currentPassword, new_password: newPassword }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { success: false, message: payload.detail || payload.message || 'Unable to change password' };
+    }
+    return { success: true, message: payload.message || 'Password changed successfully' };
+  } catch (err) {
+    return { success: false, message: 'Backend unreachable' };
+  }
+};
+
 export const backendLogin = async (email, password) => {
   try {
     const res = await fetch('http://127.0.0.1:8000/login', {

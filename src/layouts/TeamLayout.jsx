@@ -6,11 +6,11 @@ const teamSections = [
   {
     title: 'Operations',
     links: [
-      { label: 'Dashboard', path: '/team/dashboard' },
-      { label: 'Ticket Queue', path: '/team/queue', badge: '14' },
-      { label: 'Workspace', path: '/team/workspace' },
-      { label: 'Incidents', path: '/team/incidents', badge: '3' },
-      { label: 'AI Knowledge', path: '/team/knowledge' },
+      { label: 'Dept Dashboard', path: '/team/dashboard' },
+      { label: 'Ticket Queue',   path: '/team/queue' },
+      { label: 'Workspace',      path: '/team/workspace' },
+      { label: 'Incidents',      path: '/team/incidents' },
+      { label: 'AI Knowledge',   path: '/team/knowledge' },
     ],
   },
 ];

@@ -26,6 +26,13 @@ button, input, textarea, select {
   outline: none;
 }
 
+@layer components {
+  .input-field {
+    @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100;
+    color-scheme: light;
+  }
+}
+
 * {
   box-sizing: border-box;
 }

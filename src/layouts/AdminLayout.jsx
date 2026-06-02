@@ -7,12 +7,27 @@ const adminSections = [
     title: 'Management',
     links: [
       { label: 'Dashboard', path: '/admin/dashboard' },
+      { label: 'All Tickets', path: '/admin/all-tickets' },
       { label: 'Users', path: '/admin/users' },
-      { label: 'Teams', path: '/admin/teams' },
       { label: 'CSAT', path: '/admin/csat' },
       { label: 'Analytics', path: '/admin/analytics' },
       { label: 'Workflows', path: '/admin/workflows' },
       { label: 'Incidents', path: '/admin/incidents' },
+    ],
+  },
+  {
+    title: 'Administration',
+    links: [
+      { label: 'Organizations', path: '/admin/organizations' },
+      { label: 'Departments', path: '/admin/departments' },
+      { label: 'Teams', path: '/admin/teams-manage' },
+      { label: 'Team Members', path: '/admin/team-members' },
+    ],
+  },
+  {
+    title: 'AI Engine',
+    links: [
+      { label: 'AI Tools', path: '/admin/tools' },
     ],
   },
 ];

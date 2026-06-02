@@ -25,6 +25,12 @@ import AdminAnalytics from '../pages/admin/AdminAnalytics';
 import WorkflowControls from '../pages/admin/WorkflowControls';
 import CSATAnalytics from '../pages/admin/CSATAnalytics';
 import IncidentDashboard from '../pages/admin/IncidentDashboard';
+import AdminOrganizations from '../pages/admin/AdminOrganizations';
+import AdminDepartmentsPage from '../pages/admin/AdminDepartmentsPage';
+import AdminTeamsPage from '../pages/admin/AdminTeamsPage';
+import AdminTeamMembers from '../pages/admin/AdminTeamMembers';
+import AdminTools from '../pages/admin/AdminTools';
+import AdminAllTickets from '../pages/admin/AdminAllTickets';
 import ForgotPassword from '../pages/auth/ForgotPassword';
 
 function RoleProtectedRoute({ allowedRoles, children }) {
@@ -77,6 +83,7 @@ function AppRoutes() {
       >
         <Route path="dashboard" element={<TeamDashboard />} />
         <Route path="queue" element={<AssignedQueue />} />
+        <Route path="ticket/:id" element={<TicketDetails />} />
         <Route path="workspace" element={<TicketWorkspace />} />
         <Route path="incidents" element={<Incidents />} />
         <Route path="knowledge" element={<KnowledgeBase />} />
@@ -99,6 +106,13 @@ function AppRoutes() {
         <Route path="analytics" element={<AdminAnalytics />} />
         <Route path="workflows" element={<WorkflowControls />} />
         <Route path="incidents" element={<IncidentDashboard />} />
+        <Route path="organizations" element={<AdminOrganizations />} />
+        <Route path="departments" element={<AdminDepartmentsPage />} />
+        <Route path="teams-manage" element={<AdminTeamsPage />} />
+        <Route path="team-members" element={<AdminTeamMembers />} />
+        <Route path="tools" element={<AdminTools />} />
+        <Route path="all-tickets" element={<AdminAllTickets />} />
+        <Route path="ticket/:id" element={<TicketDetails />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/login" replace />} />
