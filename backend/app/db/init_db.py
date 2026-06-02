@@ -59,6 +59,20 @@ def ensure_table_columns(engine, inspector, table) -> None:
                 )
 
 
+def _fix_legacy_constraints() -> None:
+    """Drop DB constraints that were created incorrectly and would block operations."""
+    bad_constraints = [
+        ("tickets", "tickets_assigned_agent_id_fkey"),
+    ]
+    with engine.begin() as conn:
+        for table, constraint in bad_constraints:
+            try:
+                conn.execute(text(f'ALTER TABLE "{table}" DROP CONSTRAINT IF EXISTS "{constraint}"'))
+                logging.info("Dropped legacy constraint '%s' from '%s'", constraint, table)
+            except Exception as exc:
+                logging.warning("Could not drop constraint '%s': %s", constraint, exc)
+
+
 def init_db() -> None:
     """Initialize the database.
 
@@ -135,6 +149,9 @@ def init_db() -> None:
         raise RuntimeError("Database initialization failed; see logs for details")
 
     logging.info("Tables initialized (safe creation)")
+
+    # Drop any legacy bad FK constraints that point to wrong tables
+    _fix_legacy_constraints()
 
     # Initialize pgvector extension and migrate ticket_embeddings
     try:

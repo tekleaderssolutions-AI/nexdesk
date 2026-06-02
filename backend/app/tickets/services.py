@@ -41,6 +41,65 @@ def _assign_p1_team(db: Session, user: User) -> Optional[Team]:
     return None
 
 
+def _get_sla_minutes_map(db: Session) -> dict:
+    """Load SLA rules from DB keyed by priority_code. Falls back to defaults."""
+    from app.models.models import SLARule, PriorityMaster
+    rows = (
+        db.query(SLARule, PriorityMaster)
+        .join(PriorityMaster, SLARule.priority_id == PriorityMaster.id)
+        .filter(SLARule.is_active == True)
+        .all()
+    )
+    if rows:
+        return {
+            pm.priority_code: {
+                "first_response_min": rule.first_response_minutes,
+                "resolution_min": rule.resolution_minutes,
+            }
+            for rule, pm in rows
+        }
+    return {
+        "P1": {"first_response_min": 30,   "resolution_min": 240},
+        "P2": {"first_response_min": 60,   "resolution_min": 480},
+        "P3": {"first_response_min": 240,  "resolution_min": 1440},
+        "P4": {"first_response_min": 480,  "resolution_min": 4320},
+        "P5": {"first_response_min": 1440, "resolution_min": 10080},
+    }
+
+
+def _compute_sla_status(ticket, sla_map: dict) -> dict:
+    """Return SLA breach/risk/deadline info for a ticket."""
+    now = datetime.datetime.utcnow()
+    priority = (ticket.priority or "P3").upper()
+    rule = sla_map.get(priority, {"first_response_min": 1440, "resolution_min": 4320})
+    created = ticket.created_at
+    if not created:
+        return {}
+    res_deadline = created + datetime.timedelta(minutes=rule["resolution_min"])
+    fr_deadline  = created + datetime.timedelta(minutes=rule["first_response_min"])
+    closed_statuses = {
+        "RESOLVED", "CLOSED", "AI_RESOLVED", "CANCELLED",
+        "AI_RESOLVED_PENDING_USER_CONFIRMATION",
+    }
+    is_closed = (ticket.status or "").upper() in closed_statuses
+    elapsed_sec = (now - created).total_seconds()
+    total_sec   = rule["resolution_min"] * 60
+    pct_elapsed = min(100, round(elapsed_sec / max(total_sec, 1) * 100, 1))
+    is_breached = not is_closed and res_deadline < now
+    is_at_risk  = not is_closed and not is_breached and pct_elapsed >= 80
+    minutes_remaining = max(0, int((res_deadline - now).total_seconds() / 60))
+    return {
+        "sla_breached":               is_breached,
+        "sla_at_risk":                is_at_risk,
+        "sla_deadline":               res_deadline.isoformat(),
+        "sla_first_response_deadline": fr_deadline.isoformat(),
+        "sla_minutes_remaining":      minutes_remaining,
+        "sla_pct_elapsed":            pct_elapsed,
+        "sla_resolution_minutes":     rule["resolution_min"],
+        "sla_first_response_minutes": rule["first_response_min"],
+    }
+
+
 def _enrich_with_relationship(db: Session, ticket: Ticket) -> Ticket:
     """Attach parent relationship fields to a Ticket ORM instance."""
     rel = (
@@ -328,6 +387,11 @@ def _enrich_ticket_names(db: Session, ticket: Ticket) -> None:
     else:
         ticket.department_name = None
 
+    sla_map = _get_sla_minutes_map(db)
+    sla = _compute_sla_status(ticket, sla_map)
+    for k, v in sla.items():
+        setattr(ticket, k, v)
+
 
 def get_ticket_by_id(db: Session, ticket_id: str) -> Optional[Ticket]:
     ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
@@ -406,7 +470,7 @@ def list_tickets(
 
 
 def _enrich_list_with_names(db: Session, tickets: List[Ticket]) -> None:
-    """Batch-resolve category / subcategory / team / department display names."""
+    """Batch-resolve category / subcategory / team / department / creator display names."""
     if not tickets:
         return
 
@@ -414,6 +478,8 @@ def _enrich_list_with_names(db: Session, tickets: List[Ticket]) -> None:
     sub_ids    = list({str(t.subcategory_id) for t in tickets if t.subcategory_id})
     team_ids   = list({str(t.assigned_team_id) for t in tickets if t.assigned_team_id})
     dept_ids   = list({str(t.department_id)  for t in tickets if t.department_id})
+    creator_ids = list({str(t.created_by) for t in tickets if t.created_by})
+    ticket_ids  = [t.id for t in tickets]
 
     cat_map  = {str(c.id): c.category_name    for c in db.query(Category).filter(Category.id.in_(cat_ids)).all()} if cat_ids else {}
     sub_map  = {str(s.id): s.subcategory_name for s in db.query(Subcategory).filter(Subcategory.id.in_(sub_ids)).all()} if sub_ids else {}
@@ -424,6 +490,24 @@ def _enrich_list_with_names(db: Session, tickets: List[Ticket]) -> None:
 
     all_dept_ids = set(dept_ids) | set(team_dept_map.values())
     dept_map = {str(d.id): d.department_name for d in db.query(Department).filter(Department.id.in_(all_dept_ids)).all()} if all_dept_ids else {}
+
+    # Batch-resolve creator names
+    creator_map = {
+        str(u.user_id): u.full_name
+        for u in db.query(User).filter(User.user_id.in_(creator_ids)).all()
+    } if creator_ids else {}
+
+    # Count duplicate children (tickets whose duplicate_of points to each ticket)
+    from sqlalchemy import func as _func
+    dup_counts = {
+        str(row[0]): row[1]
+        for row in db.query(Ticket.duplicate_of, _func.count(Ticket.id))
+        .filter(Ticket.duplicate_of.in_(ticket_ids), Ticket.duplicate_of.isnot(None))
+        .group_by(Ticket.duplicate_of)
+        .all()
+    } if ticket_ids else {}
+
+    sla_map = _get_sla_minutes_map(db)
 
     for ticket in tickets:
         ticket.category_name      = cat_map.get(str(ticket.category_id))    if ticket.category_id    else None
@@ -436,6 +520,11 @@ def _enrich_list_with_names(db: Session, tickets: List[Ticket]) -> None:
             ticket.department_name = dept_map.get(fallback_dept_id) if fallback_dept_id else None
         else:
             ticket.department_name = None
+        ticket.creator_name   = creator_map.get(str(ticket.created_by)) if ticket.created_by else None
+        ticket.duplicate_count = dup_counts.get(str(ticket.id), 0)
+        sla = _compute_sla_status(ticket, sla_map)
+        for k, v in sla.items():
+            setattr(ticket, k, v)
 
 
 def update_ticket(
@@ -642,12 +731,17 @@ def get_ticket_timeline(db: Session, ticket_id: str) -> List[dict]:
 # ── Dashboard stats ────────────────────────────────────────────────────────────
 
 def get_admin_dashboard_stats(db: Session) -> dict:
-    """Aggregate ticket counts by status, priority, per-team workload, and AI resolution metrics."""
+    """Aggregate ticket counts by status, priority, per-team/dept workload, and AI resolution metrics."""
+    from app.models.models import TicketResolutionScore, KnowledgeBase, CSATFeedback
+
+    now = datetime.datetime.utcnow()
     all_tickets = db.query(Ticket).all()
 
     status_counts: dict = {}
     priority_counts: dict = {}
     team_counts: dict = {}
+    category_counts: dict = {}
+    dept_stats: dict = {}    # dept_id -> {total, open, in_progress, resolved, sla_breached}
 
     # AI resolution tracking
     ai_auto_resolved    = 0
@@ -656,13 +750,26 @@ def get_admin_dashboard_stats(db: Session) -> dict:
     ai_accepted         = 0
     ai_rejected         = 0
     team_edited_ai      = 0
+    active_incidents    = 0
+    tickets_reopened    = 0
+    duplicate_count     = 0
+    total_res_hours     = 0.0
+    resolved_with_time  = 0
+
+    sla_map = _get_sla_minutes_map(db)
+    active_statuses = {"OPEN", "ASSIGNED", "IN_PROGRESS", "AI_TEAM_REVIEW",
+                       "AI_RESOLVED_PENDING_USER_CONFIRMATION", "TEAM_APPROVED_AI_RESPONSE"}
 
     for t in all_tickets:
-        status_counts[t.status] = status_counts.get(t.status, 0) + 1
+        s = t.status or "OPEN"
+        status_counts[s] = status_counts.get(s, 0) + 1
         priority_counts[t.priority] = priority_counts.get(t.priority, 0) + 1
         if t.assigned_team_id:
             key = str(t.assigned_team_id)
             team_counts[key] = team_counts.get(key, 0) + 1
+        if t.category_id:
+            cid = str(t.category_id)
+            category_counts[cid] = category_counts.get(cid, 0) + 1
 
         # AI resolution metrics
         rt = (t.resolution_type or "").upper()
@@ -670,7 +777,7 @@ def get_admin_dashboard_stats(db: Session) -> dict:
             ai_auto_resolved += 1
         elif rt == "AI_TEAM_REVIEW":
             ai_team_review += 1
-        elif t.status in ("RESOLVED", "CLOSED") and rt not in ("AI_AUTO_RESOLVE", "AI_TEAM_REVIEW"):
+        elif s in ("RESOLVED", "CLOSED") and rt not in ("AI_AUTO_RESOLVE", "AI_TEAM_REVIEW"):
             human_resolved += 1
 
         if t.closed_by_user and rt == "AI_AUTO_RESOLVE":
@@ -680,13 +787,71 @@ def get_admin_dashboard_stats(db: Session) -> dict:
         if t.edited_team_solution:
             team_edited_ai += 1
 
+        if t.major_incident_flag and s in active_statuses:
+            active_incidents += 1
+        if s == "REOPENED":
+            tickets_reopened += 1
+        if t.duplicate_of:
+            duplicate_count += 1
+
+        # Avg resolution time (hours)
+        if s in ("RESOLVED", "CLOSED") and t.created_at and t.updated_at:
+            delta_h = (t.updated_at - t.created_at).total_seconds() / 3600
+            if 0 < delta_h < 720:  # cap at 30 days
+                total_res_hours += delta_h
+                resolved_with_time += 1
+
+        # Per-department stats
+        if t.department_id:
+            did = str(t.department_id)
+            if did not in dept_stats:
+                dept_stats[did] = {"total": 0, "open": 0, "in_progress": 0, "resolved": 0, "sla_breached": 0}
+            ds = dept_stats[did]
+            ds["total"] += 1
+            if s in ("OPEN", "ASSIGNED"):
+                ds["open"] += 1
+            elif s == "IN_PROGRESS":
+                ds["in_progress"] += 1
+            elif s in ("RESOLVED", "CLOSED"):
+                ds["resolved"] += 1
+            # SLA breach check
+            if s in active_statuses and t.created_at:
+                h = sla_map.get(t.priority, {}).get("resolution_min", 4320) / 60
+                if t.created_at + datetime.timedelta(hours=h) < now:
+                    ds["sla_breached"] += 1
+
     # Acceptance / rejection rates
     total_ai_delivered = ai_accepted + ai_rejected
     ai_acceptance_rate = round(ai_accepted / total_ai_delivered * 100, 1) if total_ai_delivered else 0.0
     ai_rejection_rate  = round(ai_rejected / total_ai_delivered * 100, 1) if total_ai_delivered else 0.0
 
-    # Most successful KB articles (tickets that were AI_AUTO_RESOLVE and accepted)
-    from app.models.models import TicketResolutionScore, KnowledgeBase
+    # AI resolution %
+    total = len(all_tickets)
+    ai_resolved_total = ai_auto_resolved + ai_team_review
+    ai_resolution_pct = round(ai_resolved_total / total * 100, 1) if total else 0.0
+
+    # Overall SLA compliance
+    active_n = sum(1 for t in all_tickets if (t.status or "") in active_statuses)
+    sla_breached_total = sum(ds["sla_breached"] for ds in dept_stats.values())
+    sla_compliance_pct = round((1 - sla_breached_total / max(active_n, 1)) * 100, 1)
+
+    # Duplicate reduction %
+    duplicate_reduction_pct = round(duplicate_count / total * 100, 1) if total else 0.0
+
+    # Avg resolution time
+    avg_resolution_hours = round(total_res_hours / resolved_with_time, 1) if resolved_with_time else 0.0
+
+    # Pending CSAT (resolved tickets without feedback)
+    resolved_ids = [t.id for t in all_tickets if (t.status or "") in ("RESOLVED", "CLOSED", "AI_RESOLVED")]
+    rated_ids = set()
+    if resolved_ids:
+        rated_rows = db.query(CSATFeedback.ticket_id).filter(CSATFeedback.ticket_id.in_(resolved_ids)).all()
+        rated_ids = {str(r[0]) for r in rated_rows}
+    pending_feedback = sum(1 for t in all_tickets
+                           if (t.status or "") in ("RESOLVED", "CLOSED", "AI_RESOLVED")
+                           and str(t.id) not in rated_ids)
+
+    # Most successful KB articles
     kb_rows = (
         db.query(TicketResolutionScore.matched_kb_article_id, sql_func.count().label("cnt"))
         .filter(TicketResolutionScore.matched_kb_article_id.isnot(None))
@@ -705,6 +870,25 @@ def get_admin_dashboard_stats(db: Session) -> dict:
         for r in kb_rows if r[0]
     ]
 
+    # Department breakdown with names
+    dept_breakdown = []
+    if dept_stats:
+        depts = db.query(Department).filter(Department.id.in_(list(dept_stats.keys()))).all()
+        dept_name_map = {str(d.id): d.department_name for d in depts}
+        for did, ds in dept_stats.items():
+            active_in_dept = ds["open"] + ds["in_progress"]
+            dept_sla = round((1 - ds["sla_breached"] / max(active_in_dept, 1)) * 100, 1)
+            dept_breakdown.append({
+                "dept_id": did,
+                "dept_name": dept_name_map.get(did, did),
+                "total": ds["total"],
+                "open": ds["open"],
+                "in_progress": ds["in_progress"],
+                "resolved": ds["resolved"],
+                "sla_compliance": dept_sla,
+            })
+        dept_breakdown.sort(key=lambda x: -x["total"])
+
     # Resolve team names
     team_name_map = {}
     if team_counts:
@@ -716,6 +900,53 @@ def get_admin_dashboard_stats(db: Session) -> dict:
         for tid, cnt in sorted(team_counts.items(), key=lambda x: -x[1])
     ]
 
+    # Category breakdown
+    cat_breakdown = []
+    if category_counts:
+        cats = db.query(Category).filter(Category.id.in_(list(category_counts.keys()))).all()
+        cat_name_map = {str(c.id): c.category_name for c in cats}
+        cat_breakdown = sorted(
+            [{"category": cat_name_map.get(cid, cid), "count": cnt}
+             for cid, cnt in category_counts.items()],
+            key=lambda x: -x["count"],
+        )[:6]
+
+    # Daily volume – last 30 days
+    thirty_days_ago = now - datetime.timedelta(days=30)
+    daily_new: dict = {}
+    daily_resolved: dict = {}
+    for t in all_tickets:
+        if t.created_at and t.created_at >= thirty_days_ago:
+            d = t.created_at.strftime("%m/%d")
+            daily_new[d] = daily_new.get(d, 0) + 1
+        if (t.status or "") in ("RESOLVED", "CLOSED") and t.updated_at and t.updated_at >= thirty_days_ago:
+            d = t.updated_at.strftime("%m/%d")
+            daily_resolved[d] = daily_resolved.get(d, 0) + 1
+    all_days = sorted(set(list(daily_new.keys()) + list(daily_resolved.keys())))
+    daily_volume = [
+        {"date": d, "new": daily_new.get(d, 0), "resolved": daily_resolved.get(d, 0)}
+        for d in all_days
+    ]
+
+    # Active incidents list (top 5)
+    incident_tickets = [
+        t for t in all_tickets
+        if t.major_incident_flag and (t.status or "") in active_statuses
+    ][:5]
+    incidents_list = []
+    if incident_tickets:
+        inc_team_ids = [str(t.assigned_team_id) for t in incident_tickets if t.assigned_team_id]
+        inc_team_map = {str(t.id): t.team_name for t in db.query(Team).filter(Team.id.in_(inc_team_ids)).all()} if inc_team_ids else {}
+        for t in incident_tickets:
+            incidents_list.append({
+                "ticket_id": str(t.id),
+                "ticket_no": t.ticket_no,
+                "subject": t.subject,
+                "priority": t.priority,
+                "status": t.status,
+                "assigned_team": inc_team_map.get(str(t.assigned_team_id), "—") if t.assigned_team_id else "—",
+            })
+
     open_count     = status_counts.get("OPEN", 0)
     assigned_count = status_counts.get("ASSIGNED", 0)
     pending_count  = status_counts.get("PENDING_ADMIN_REVIEW", 0)
@@ -723,15 +954,26 @@ def get_admin_dashboard_stats(db: Session) -> dict:
     in_progress    = status_counts.get("IN_PROGRESS", 0)
 
     return {
-        "total_tickets":    len(all_tickets),
+        "total_tickets":    total,
         "open":             open_count,
         "assigned":         assigned_count,
         "in_progress":      in_progress,
         "pending_review":   pending_count,
         "resolved":         resolved_count,
+        "tickets_reopened": tickets_reopened,
+        "active_incidents": active_incidents,
+        "pending_feedback": pending_feedback,
+        "avg_resolution_hours": avg_resolution_hours,
+        "ai_resolution_pct": ai_resolution_pct,
+        "sla_compliance_pct": sla_compliance_pct,
+        "duplicate_reduction_pct": duplicate_reduction_pct,
         "status_breakdown": status_counts,
         "priority_breakdown": priority_counts,
+        "category_breakdown": cat_breakdown,
         "team_workload":    team_workload,
+        "department_breakdown": dept_breakdown,
+        "daily_volume":     daily_volume,
+        "incidents_list":   incidents_list,
         # ── AI resolution metrics ─────────────────────────────────────────────
         "ai_auto_resolved":    ai_auto_resolved,
         "ai_team_review":      ai_team_review,
@@ -825,7 +1067,7 @@ def mark_notifications_read(db: Session, user_id: str) -> None:
 
 def get_department_dashboard_stats(db: Session, user) -> dict:
     now = datetime.datetime.utcnow()
-    sla_hours = {"P1": 4, "P2": 8, "P3": 24, "P4": 72}
+    sla_map = _get_sla_minutes_map(db)
 
     # ── Resolve which teams belong to this user's department ──────────────────
     dept_name = "Department"
@@ -879,7 +1121,7 @@ def get_department_dashboard_stats(db: Session, user) -> dict:
         if t.priority == "P1" and active:
             escalated += 1
         if active and t.created_at:
-            h = sla_hours.get(t.priority, 72)
+            h = sla_map.get(t.priority, {}).get("resolution_min", 4320) / 60
             deadline = t.created_at + datetime.timedelta(hours=h)
             if deadline < now:
                 sla_breached += 1
@@ -917,7 +1159,7 @@ def get_department_dashboard_stats(db: Session, user) -> dict:
             if t.priority == "P1" and active:
                 ts["escalated"] += 1
             if active and t.created_at:
-                h = sla_hours.get(t.priority, 72)
+                h = sla_map.get(t.priority, {}).get("resolution_min", 4320) / 60
                 if t.created_at + datetime.timedelta(hours=h) < now:
                     ts["sla_breached"] += 1
 
@@ -1134,3 +1376,295 @@ def create_conversation_message(db: Session, ticket_id: str, sender, message: st
         "is_internal": conv.is_internal,
         "created_at": conv.created_at,
     }
+
+
+# ── CSAT ──────────────────────────────────────────────────────────────────────
+
+def submit_csat(db: Session, ticket_id: str, user, rating: int,
+                feedback_text: Optional[str], is_resolved: Optional[bool]) -> object:
+    from app.models.models import CSATFeedback
+    existing = db.query(CSATFeedback).filter(
+        CSATFeedback.ticket_id == ticket_id,
+        CSATFeedback.user_id == user.user_id,
+    ).first()
+    if existing:
+        existing.rating = rating
+        existing.feedback_text = feedback_text
+        existing.is_resolved = is_resolved
+        db.commit()
+        db.refresh(existing)
+        return existing
+    record = CSATFeedback(
+        ticket_id=ticket_id,
+        user_id=user.user_id,
+        rating=rating,
+        feedback_text=feedback_text,
+        is_resolved=is_resolved,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def get_user_csat_records(db: Session, user) -> list:
+    from app.models.models import CSATFeedback
+    return (
+        db.query(CSATFeedback)
+        .filter(CSATFeedback.user_id == user.user_id)
+        .order_by(CSATFeedback.created_at.desc())
+        .all()
+    )
+
+
+# ── Live ticket analyze (pre-submit preview) ───────────────────────────────────
+
+def analyze_ticket_preview(db: Session, subject: str, description: str) -> dict:
+    """
+    Runs lightweight classification + vector search on raw subject/description
+    before the ticket is created. Used by the New Ticket right-panel live preview.
+    """
+    from types import SimpleNamespace
+    from sqlalchemy import text as sa_text
+    from app.services.classification_service import (
+        CategoryAgent, ImpactAgent, UrgencyAgent,
+        _fetch_master_data, _BASE_MATRIX,
+    )
+    from app.services.embedding_service import EmbeddingService
+    from app.models.models import AssignmentRule
+
+    mock = SimpleNamespace(subject=subject, description=description)
+
+    # 1. Category (full LLM + heuristic fallback)
+    master = _fetch_master_data(db)
+    cat = CategoryAgent.classify(mock, master)
+
+    # 2. Urgency + Impact via heuristic keywords → Priority matrix
+    impact_r  = ImpactAgent._heuristic(mock)
+    urgency_r = UrgencyAgent._heuristic(mock)
+    impact    = impact_r["impact"]
+    urgency   = urgency_r["urgency"]
+    priority  = _BASE_MATRIX.get((impact, urgency), "P3")
+
+    # 3. Suggest a team from the detected category via assignment_rules
+    suggested_team = None
+    cat_name = cat.get("category_name") or ""
+    if cat_name:
+        cat_obj = db.query(Category).filter(
+            Category.category_name.ilike(cat_name)
+        ).first()
+        if cat_obj:
+            rule = (
+                db.query(AssignmentRule)
+                .filter(AssignmentRule.category_id == cat_obj.id,
+                        AssignmentRule.is_active == True)
+                .first()
+            )
+            if rule:
+                team_obj = db.query(Team).filter(Team.id == rule.team_id).first()
+                if team_obj:
+                    suggested_team = team_obj.team_name
+
+    # 4. Generate embedding for vector searches
+    emb_text  = EmbeddingService.build_embedding_text(subject, description)
+    embedding = EmbeddingService.generate_embedding(emb_text)
+    vec_str   = "[" + ",".join(str(round(float(v), 8)) for v in embedding) + "]"
+
+    # 5. Similar open tickets
+    sim_sql = sa_text("""
+        SELECT t.ticket_no, t.subject, t.status,
+               ROUND(CAST((1 - (te.embedding <=> CAST(:vec AS vector))) * 100 AS numeric), 1) AS similarity
+        FROM ticket_embeddings te
+        JOIN tickets t ON t.id = te.ticket_id
+        WHERE t.status NOT IN ('CLOSED', 'RESOLVED', 'CANCELLED')
+        ORDER BY te.embedding <=> CAST(:vec AS vector)
+        LIMIT 5
+    """)
+    sim_rows = db.execute(sim_sql, {"vec": vec_str}).fetchall()
+    similar_tickets = [
+        {"ticket_no": r[0], "subject": r[1], "status": r[2], "similarity": float(r[3])}
+        for r in sim_rows
+        if float(r[3]) > 40
+    ][:3]
+
+    # 6. KB article suggestions
+    kb_sql = sa_text("""
+        SELECT kb.title, kb.resolution,
+               ROUND(CAST((1 - (kbe.embedding <=> CAST(:vec AS vector))) * 100 AS numeric), 1) AS similarity
+        FROM kb_embeddings kbe
+        JOIN knowledge_base kb ON kb.id = kbe.kb_id
+        WHERE kb.is_published = true
+        ORDER BY kbe.embedding <=> CAST(:vec AS vector)
+        LIMIT 5
+    """)
+    kb_rows = db.execute(kb_sql, {"vec": vec_str}).fetchall()
+    kb_suggestions = [
+        {"title": r[0], "resolution_preview": (r[1] or "")[:140]}
+        for r in kb_rows
+        if float(r[2]) > 35
+    ][:3]
+
+    return {
+        "category": cat_name or None,
+        "category_confidence": round((cat.get("confidence") or 0) * 100),
+        "priority": priority,
+        "urgency": urgency,
+        "impact": impact,
+        "suggested_team": suggested_team,
+        "similar_tickets": similar_tickets,
+        "kb_suggestions": kb_suggestions,
+    }
+
+
+# ── Team member workload ───────────────────────────────────────────────────────
+
+def get_team_members_workload(db: Session, user) -> dict:
+    """Returns team members with their assigned tickets and current user's member_role."""
+    member_record = db.query(TeamMember).filter(TeamMember.user_id == user.user_id).first()
+    if not member_record:
+        return {
+            "team_id": None, "team_name": None,
+            "current_user_member_role": "AGENT",
+            "members": [], "unassigned_tickets": [],
+        }
+
+    team = db.query(Team).filter(Team.id == member_record.team_id).first()
+    current_member_role = (member_record.member_role or "AGENT").upper()
+
+    team_members = (
+        db.query(TeamMember, User)
+        .join(User, TeamMember.user_id == User.user_id)
+        .filter(TeamMember.team_id == member_record.team_id)
+        .all()
+    )
+
+    active_statuses = [
+        "OPEN", "IN_PROGRESS", "ASSIGNED", "ESCALATED", "REOPENED",
+        "AI_TEAM_REVIEW", "AI_RESOLVED_PENDING_USER_CONFIRMATION", "TEAM_APPROVED_AI_RESPONSE",
+    ]
+    team_tickets = (
+        db.query(Ticket)
+        .filter(Ticket.assigned_team_id == member_record.team_id)
+        .filter(Ticket.status.in_(active_statuses))
+        .order_by(Ticket.created_at.desc())
+        .limit(300)
+        .all()
+    )
+
+    sla_map = _get_sla_minutes_map(db)
+
+    def ticket_preview(t):
+        sla = _compute_sla_status(t, sla_map)
+        return {
+            "ticket_id": str(t.id),
+            "ticket_no": t.ticket_no,
+            "subject": t.subject,
+            "status": t.status,
+            "priority": t.priority or "P3",
+            "sla_breached": sla.get("sla_breached"),
+            "sla_at_risk": sla.get("sla_at_risk"),
+            "sla_minutes_remaining": sla.get("sla_minutes_remaining"),
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+        }
+
+    agent_ticket_map: dict = {}
+    unassigned = []
+    for t in team_tickets:
+        if t.assigned_agent_id:
+            aid = str(t.assigned_agent_id)
+            agent_ticket_map.setdefault(aid, []).append(ticket_preview(t))
+        else:
+            unassigned.append(ticket_preview(t))
+
+    members_out = []
+    for tm, u in team_members:
+        uid = str(u.user_id)
+        members_out.append({
+            "member_id": str(tm.id),
+            "user_id": uid,
+            "full_name": u.full_name,
+            "member_role": (tm.member_role or "AGENT").upper(),
+            "tickets": agent_ticket_map.get(uid, []),
+        })
+
+    # All members across every team in the same department (for name resolution + assign dropdown + chart)
+    department_members = []
+    if team and team.department_id:
+        from uuid import UUID as _UUID
+        dept_team_ids_uuid = [
+            t.id for t in db.query(Team).filter(
+                Team.department_id == team.department_id, Team.is_active == True
+            ).all()
+        ]
+        dept_team_ids = [str(tid) for tid in dept_team_ids_uuid]
+        dept_rows = (
+            db.query(TeamMember, User)
+            .join(User, TeamMember.user_id == User.user_id)
+            .filter(TeamMember.team_id.in_(dept_team_ids_uuid))
+            .all()
+        )
+
+        # Count active tickets assigned to each dept member
+        from sqlalchemy import func as _func
+        dept_ticket_counts = {
+            str(row[0]): row[1]
+            for row in db.query(Ticket.assigned_agent_id, _func.count(Ticket.id))
+            .filter(
+                Ticket.assigned_team_id.in_(dept_team_ids_uuid),
+                Ticket.assigned_agent_id.isnot(None),
+                Ticket.status.in_(active_statuses),
+            )
+            .group_by(Ticket.assigned_agent_id)
+            .all()
+        }
+
+        department_members = [
+            {
+                "user_id": str(u.user_id),
+                "full_name": u.full_name,
+                "member_role": (tm.member_role or "AGENT").upper(),
+                "team_id": str(tm.team_id),
+                "ticket_count": dept_ticket_counts.get(str(u.user_id), 0),
+            }
+            for tm, u in dept_rows
+        ]
+
+    return {
+        "team_id": str(team.id) if team else None,
+        "team_name": team.team_name if team else None,
+        "current_user_member_role": current_member_role,
+        "members": members_out,
+        "unassigned_tickets": unassigned,
+        "department_members": department_members,
+    }
+
+
+def assign_ticket_to_member(db: Session, ticket_id: str, agent_user_id: str, current_user) -> dict:
+    """Assign a ticket to a specific team member. Only MANAGER can do this."""
+    cur_member = db.query(TeamMember).filter(TeamMember.user_id == current_user.user_id).first()
+    if not cur_member or (cur_member.member_role or "AGENT").upper() != "MANAGER":
+        raise PermissionError("Only team managers can assign tickets to members")
+
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        raise ValueError("Ticket not found")
+
+    agent_member = db.query(TeamMember).filter(
+        TeamMember.user_id == agent_user_id,
+        TeamMember.team_id == cur_member.team_id,
+    ).first()
+    if not agent_member:
+        raise ValueError("Agent is not a member of your team")
+
+    ticket.assigned_agent_id = agent_user_id
+    if not ticket.assigned_team_id:
+        ticket.assigned_team_id = str(cur_member.team_id)
+    db.commit()
+    db.refresh(ticket)
+
+    add_timeline_event(
+        db, ticket_id, "ASSIGNED_TO_MEMBER",
+        f"Ticket assigned to team member by manager",
+        performed_by=str(current_user.user_id),
+    )
+    return {"success": True, "ticket_no": ticket.ticket_no, "agent_user_id": agent_user_id}

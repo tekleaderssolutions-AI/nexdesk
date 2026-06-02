@@ -549,6 +549,39 @@ def delete_team_member_skill(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ==================== SLA RULES ====================
+
+@router.get("/sla-rules", response_model=List[schemas.SLARuleResponse])
+def list_sla_rules(
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return services.get_sla_rules(db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/sla-rules/{rule_id}", response_model=schemas.SLARuleResponse)
+def update_sla_rule(
+    rule_id: UUID,
+    payload: schemas.SLARuleUpdate,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return services.update_sla_rule(
+            db, rule_id,
+            first_response_minutes=payload.first_response_minutes,
+            resolution_minutes=payload.resolution_minutes,
+            is_active=payload.is_active,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== USERS ====================
 
 @router.get("/users", response_model=List[schemas.UserResponse])
@@ -911,3 +944,36 @@ def deactivate_tool(
     tool.is_active = False
     db.add(tool)
     db.commit()
+
+
+# ==================== ANALYTICS & CSAT ==================
+
+@router.get("/csat-analytics")
+def admin_csat_analytics(
+    days: int = 30,
+    team_id: Optional[str] = None,
+    rating: Optional[int] = None,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return services.get_admin_csat_analytics(db, days=days, team_id=team_id, rating=rating)
+
+
+@router.get("/analytics")
+def admin_analytics(
+    dept_id: Optional[str] = None,
+    team_id: Optional[str] = None,
+    member_id: Optional[str] = None,
+    days: int = 90,
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return services.get_admin_analytics(db, dept_id=dept_id, team_id=team_id, member_id=member_id, days=days)
+
+
+@router.get("/structure")
+def admin_org_structure(
+    current_admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return services.get_org_structure(db)

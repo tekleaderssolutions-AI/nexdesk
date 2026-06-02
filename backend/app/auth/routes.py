@@ -65,6 +65,12 @@ def read_current_user(current_user=Depends(get_current_user), db: Session = Depe
         team = db.query(Team).filter(Team.id == member.team_id).first()
         if team and team.department_id:
             department_id = str(team.department_id)
+    from app.models.models import Organization
+    org_name = None
+    if current_user.organization_id:
+        org = db.query(Organization).filter(Organization.id == current_user.organization_id).first()
+        org_name = org.org_name if org else None
+
     return {
         "id": str(current_user.user_id),
         "email": current_user.email,
@@ -72,6 +78,8 @@ def read_current_user(current_user=Depends(get_current_user), db: Session = Depe
         "full_name": current_user.full_name,
         "team_id": team_id,
         "department_id": department_id,
+        "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+        "org_name": org_name,
     }
 
 

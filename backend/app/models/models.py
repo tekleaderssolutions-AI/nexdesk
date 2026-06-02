@@ -242,7 +242,7 @@ class Ticket(Base):
     department_id = Column(PG_UUID(as_uuid=True), ForeignKey("departments.id"), nullable=True)
     assigned_team_id = Column(PG_UUID(as_uuid=True), ForeignKey("teams.id"), nullable=True)
     created_by = Column(PG_UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=True)
-    assigned_agent_id = Column(PG_UUID(as_uuid=True), ForeignKey("agents.id"), nullable=True)
+    assigned_agent_id = Column(PG_UUID(as_uuid=True), nullable=True)  # references users.user_id, no FK (validated at app level)
     category_id = Column(PG_UUID(as_uuid=True), ForeignKey("categories.id"), nullable=True)
     subcategory_id = Column(PG_UUID(as_uuid=True), ForeignKey("subcategories.id"), nullable=True)
     subject = Column(Text, nullable=False)
@@ -493,6 +493,8 @@ class CSATFeedback(Base):
     user_id = Column(PG_UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=False)
     rating = Column(Integer, nullable=False)
     feedback_text = Column(Text, nullable=True)
+    is_resolved = Column(Boolean, nullable=True, default=True)
+    created_at = Column(TIMESTAMP, server_default=func.now())
 
 
 class AuditLog(Base):

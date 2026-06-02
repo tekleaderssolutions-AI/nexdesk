@@ -259,3 +259,25 @@ class PasswordResetResponse(BaseModel):
     user_id: UUID
     temporary_password: str
     message: str
+
+
+# ==================== SLA RULES ====================
+
+class SLARuleResponse(BaseModel):
+    id: UUID
+    priority_id: UUID
+    priority_code: str
+    priority_name: str
+    first_response_minutes: int
+    resolution_minutes: int
+    is_active: bool
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SLARuleUpdate(BaseModel):
+    first_response_minutes: Optional[int] = None
+    resolution_minutes: Optional[int] = None
+    is_active: Optional[bool] = None

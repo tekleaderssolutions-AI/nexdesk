@@ -5,6 +5,53 @@ from uuid import UUID
 from pydantic import BaseModel
 
 
+class CSATCreate(BaseModel):
+    rating: int
+    feedback_text: Optional[str] = None
+    is_resolved: Optional[bool] = True
+
+
+class CSATResponse(BaseModel):
+    id: UUID
+    ticket_id: UUID
+    user_id: UUID
+    rating: int
+    feedback_text: Optional[str] = None
+    is_resolved: Optional[bool] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class TicketAnalyzeRequest(BaseModel):
+    subject: str
+    description: str
+
+
+class SimilarTicketPreview(BaseModel):
+    ticket_no: str
+    subject: str
+    status: str
+    similarity: float
+
+
+class KBSuggestionPreview(BaseModel):
+    title: str
+    resolution_preview: str
+
+
+class TicketAnalyzeResponse(BaseModel):
+    category: Optional[str] = None
+    category_confidence: Optional[int] = None
+    priority: Optional[str] = None
+    urgency: Optional[str] = None
+    impact: Optional[str] = None
+    suggested_team: Optional[str] = None
+    similar_tickets: List[SimilarTicketPreview] = []
+    kb_suggestions: List[KBSuggestionPreview] = []
+
+
 class AttachmentCreate(BaseModel):
     file_name: Optional[str] = None
     file_type: Optional[str] = None
@@ -134,6 +181,8 @@ class TicketResponse(BaseModel):
     subcategory_name: Optional[str] = None
     assigned_team_name: Optional[str] = None
     department_name: Optional[str] = None
+    creator_name: Optional[str] = None
+    duplicate_count: Optional[int] = 0
     # Lifecycle fields
     assigned_department_id: Optional[UUID] = None
     resolved_by: Optional[str] = None
@@ -142,6 +191,15 @@ class TicketResponse(BaseModel):
     final_resolution_confidence: Optional[float] = None
     closed_by_user: bool = False
     ai_resolution_rejected: bool = False
+    # SLA status (computed from sla_rules table)
+    sla_breached: Optional[bool] = None
+    sla_at_risk: Optional[bool] = None
+    sla_deadline: Optional[str] = None
+    sla_first_response_deadline: Optional[str] = None
+    sla_minutes_remaining: Optional[int] = None
+    sla_pct_elapsed: Optional[float] = None
+    sla_resolution_minutes: Optional[int] = None
+    sla_first_response_minutes: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -291,3 +349,46 @@ class TicketMessageResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ── Team member workload ───────────────────────────────────────────────────────
+
+class MemberTicketPreview(BaseModel):
+    ticket_id: str
+    ticket_no: str
+    subject: str
+    status: str
+    priority: str
+    sla_breached: Optional[bool] = None
+    sla_at_risk: Optional[bool] = None
+    sla_minutes_remaining: Optional[int] = None
+    created_at: Optional[str] = None
+
+
+class TeamMemberWorkloadItem(BaseModel):
+    member_id: str
+    user_id: str
+    full_name: str
+    member_role: str
+    tickets: List[MemberTicketPreview] = []
+
+
+class DepartmentMemberItem(BaseModel):
+    user_id: str
+    full_name: str
+    member_role: str
+    team_id: str
+    ticket_count: int = 0
+
+
+class TeamMembersWorkloadResponse(BaseModel):
+    team_id: Optional[str] = None
+    team_name: Optional[str] = None
+    current_user_member_role: str
+    members: List[TeamMemberWorkloadItem] = []
+    unassigned_tickets: List[MemberTicketPreview] = []
+    department_members: List[DepartmentMemberItem] = []
+
+
+class AssignToMemberRequest(BaseModel):
+    agent_user_id: UUID

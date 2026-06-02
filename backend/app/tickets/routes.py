@@ -29,6 +29,45 @@ def assert_ticket_visible(ticket: Ticket, current_user) -> None:
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ticket access denied")
 
 
+@router.get("/csat", response_model=List[schemas.CSATResponse])
+def get_my_csat(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    return services.get_user_csat_records(db, current_user)
+
+
+@router.post("/tickets/{ticket_id}/csat", response_model=schemas.CSATResponse)
+def submit_csat(ticket_id: UUID, payload: schemas.CSATCreate, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    return services.submit_csat(db, str(ticket_id), current_user, payload.rating, payload.feedback_text, payload.is_resolved)
+
+
+@router.post("/tickets/analyze", response_model=schemas.TicketAnalyzeResponse)
+def analyze_ticket(payload: schemas.TicketAnalyzeRequest, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    return services.analyze_ticket_preview(db, payload.subject, payload.description)
+
+
+@router.get("/team/members-workload", response_model=schemas.TeamMembersWorkloadResponse)
+def get_team_members_workload(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    return services.get_team_members_workload(db, current_user)
+
+
+@router.post("/tickets/{ticket_id}/assign-to-member")
+def assign_ticket_to_member(
+    ticket_id: UUID,
+    payload: schemas.AssignToMemberRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ticket = db.query(Ticket).filter(Ticket.id == str(ticket_id)).first()
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    assert_ticket_visible(ticket, current_user)
+    try:
+        return services.assign_ticket_to_member(db, str(ticket_id), str(payload.agent_user_id), current_user)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
 @router.post("/tickets", response_model=schemas.TicketResponse)
 def create_ticket(payload: schemas.TicketCreate, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     ticket = services.create_ticket(
@@ -120,6 +159,16 @@ def search_tickets(
         current_user=current_user,
         db=db,
     )
+
+
+@router.get("/tickets/{ticket_id}/sla-status")
+def get_ticket_sla_status(ticket_id: UUID, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    ticket = db.query(Ticket).filter(Ticket.id == str(ticket_id)).first()
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+    assert_ticket_visible(ticket, current_user)
+    sla_map = services._get_sla_minutes_map(db)
+    return services._compute_sla_status(ticket, sla_map)
 
 
 @router.get("/tickets/{ticket_id}", response_model=schemas.TicketResponse)
